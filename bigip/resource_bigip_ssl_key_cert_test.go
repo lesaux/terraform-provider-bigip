@@ -150,37 +150,94 @@ func TestAccBigipSSLCertKeyCreateCertKeyProfileOCSP(t *testing.T) {
 }
 
 var testResourceSSLKeyCertWO = `
+ephemeral "tls_private_key" "wo" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+ephemeral "tls_self_signed_cert" "wo" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.wo.private_key_pem
+  subject {
+    common_name  = "example.com"
+    organization = "ACME Examples, Inc"
+  }
+  validity_period_hours = 12
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
 resource "bigip_ssl_key_cert" "testkeycert_wo" {
   partition          = "Common"
   key_name           = "ssl-test-key-wo"
-  key_content_wo     = "${file("` + folder + `/../examples/serverkey.key")}"
+  key_content_wo     = ephemeral.tls_private_key.wo.private_key_pem
   key_content_wo_version = 1
   cert_name          = "ssl-test-cert-wo"
-  cert_content_wo    = "${file("` + folder + `/../examples/servercert.crt")}"
+  cert_content_wo    = ephemeral.tls_self_signed_cert.wo.cert_pem
   cert_content_wo_version = 1
 }
 `
 
 var testResourceSSLKeyCertWOUpdated = `
+ephemeral "tls_private_key" "wo" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+ephemeral "tls_self_signed_cert" "wo" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.wo.private_key_pem
+  subject {
+    common_name  = "example.net"
+    organization = "ACME Examples v2, Inc"
+  }
+  validity_period_hours = 24
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
 resource "bigip_ssl_key_cert" "testkeycert_wo" {
   partition          = "Common"
   key_name           = "ssl-test-key-wo"
-  key_content_wo     = "${file("` + folder + `/../examples/serverkey2.key")}"
+  key_content_wo     = ephemeral.tls_private_key.wo.private_key_pem
   key_content_wo_version = 2
   cert_name          = "ssl-test-cert-wo"
-  cert_content_wo    = "${file("` + folder + `/../examples/servercert2.crt")}"
+  cert_content_wo    = ephemeral.tls_self_signed_cert.wo.cert_pem
   cert_content_wo_version = 2
 }
 `
 
 var testResourceSSLKeyCertWOUpdateNoVersion = `
+ephemeral "tls_private_key" "wo" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+ephemeral "tls_self_signed_cert" "wo" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.wo.private_key_pem
+  subject {
+    common_name  = "example.net"
+    organization = "ACME Examples, Inc"
+  }
+  validity_period_hours = 24
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
 resource "bigip_ssl_key_cert" "testkeycert_wo" {
   partition          = "Common"
   key_name           = "ssl-test-key-wo"
-  key_content_wo     = "${file("` + folder + `/../examples/serverkey2.key")}"
+  key_content_wo     = ephemeral.tls_private_key.wo.private_key_pem
   key_content_wo_version = 1
   cert_name          = "ssl-test-cert-wo"
-  cert_content_wo    = "${file("` + folder + `/../examples/servercert2.crt")}"
+  cert_content_wo    = ephemeral.tls_self_signed_cert.wo.cert_pem
   cert_content_wo_version = 1
 }
 `
@@ -252,15 +309,36 @@ func TestAccBigipSSLCertKeyCreateWOSuppressDiff(t *testing.T) {
 }
 
 var testResourceSSLKeyCertWOConflict = `
+ephemeral "tls_private_key" "wo" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+ephemeral "tls_self_signed_cert" "wo" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.wo.private_key_pem
+  subject {
+    common_name  = "example.com"
+    organization = "ACME Examples, Inc"
+  }
+  validity_period_hours = 12
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
 resource "bigip_ssl_key_cert" "testkeycert_wo_conflict" {
   partition          = "Common"
   key_name           = "ssl-test-key-wo-conflict"
-  key_content        = "${file("` + folder + `/../examples/serverkey.key")}"
-  key_content_wo     = "${file("` + folder + `/../examples/serverkey.key")}"
+  
+  key_content        = ephemeral.tls_private_key.wo.private_key_pem
+  key_content_wo     = ephemeral.tls_private_key.wo.private_key_pem
   key_content_wo_version = 1
+  
   cert_name          = "ssl-test-cert-wo-conflict"
-  cert_content       = "${file("` + folder + `/../examples/servercert.crt")}"
-  cert_content_wo    = "${file("` + folder + `/../examples/servercert.crt")}"
+  cert_content       = ephemeral.tls_self_signed_cert.wo.cert_pem
+  cert_content_wo    = ephemeral.tls_self_signed_cert.wo.cert_pem
   cert_content_wo_version = 1
 }
 `

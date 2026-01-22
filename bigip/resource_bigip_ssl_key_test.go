@@ -125,32 +125,43 @@ func testChecksslKeyDestroyed(s *terraform.State) error {
 	return nil
 }
 
-var folder1_wo, _ = os.Getwd()
 var SslkeyName_wo = "serverkey_wo.key"
 var TestSslkeyName_wo = fmt.Sprintf("/%s/%s", TestPartition, SslkeyName_wo)
 
 var TestSslKeyResourceWriteOnly = `
+ephemeral "tls_private_key" "wo" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
 resource "bigip_ssl_key" "test-key-wo" {
         name = "` + SslkeyName_wo + `"
-        content_wo = "${file("` + folder1_wo + `/../examples/serverkey.key")}"
+        content_wo = ephemeral.tls_private_key.wo.private_key_pem
 		content_wo_version : 1
         partition = "` + TestPartition + `"
 }
 `
 
 var TestSslKeyResourceWriteOnlyUpdated = `
+ephemeral "tls_private_key" "wo" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
 resource "bigip_ssl_key" "test-key-wo" {
         name = "` + SslkeyName_wo + `"
-        content_wo = "${file("` + folder1_wo + `/../examples/serverkey2.key")}"
+        content_wo = ephemeral.tls_private_key.wo.private_key_pem
 		content_wo_version : 2
         partition = "` + TestPartition + `"
 }
 `
 // Test update with NO version change - should NOT update
 var TestSslKeyResourceWriteOnlyNoVersionUpdate = `
+ephemeral "tls_private_key" "wo" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
 resource "bigip_ssl_key" "test-key-wo" {
         name = "` + SslkeyName_wo + `"
-        content_wo = "${file("` + folder1_wo + `/../examples/serverkey2.key")}"
+        content_wo = ephemeral.tls_private_key.wo.private_key_pem
 		content_wo_version : 1
         partition = "` + TestPartition + `"
 }
@@ -215,10 +226,14 @@ func TestAccBigipSslKeyWriteOnlySuppressDiff(t *testing.T) {
 }
 
 var TestSslKeyResourceWriteOnlyConflict = `
+ephemeral "tls_private_key" "wo" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
 resource "bigip_ssl_key" "test-key-wo-conflict" {
         name = "serverkey_wo_conflict.key"
-        content = "${file("` + folder1_wo + `/../examples/serverkey.key")}"
-        content_wo = "${file("` + folder1_wo + `/../examples/serverkey.key")}"
+        content = ephemeral.tls_private_key.wo.private_key_pem
+        content_wo = ephemeral.tls_private_key.wo.private_key_pem
 		content_wo_version : 1
         partition = "` + TestPartition + `"
 }
