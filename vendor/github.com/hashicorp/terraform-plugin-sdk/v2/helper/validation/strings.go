@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package validation
 
 import (
@@ -70,8 +67,8 @@ func StringIsWhiteSpace(i interface{}, k string) ([]string, []error) {
 }
 
 // StringLenBetween returns a SchemaValidateFunc which tests if the provided value
-// is of type string and has length between minVal and maxVal (inclusive)
-func StringLenBetween(minVal, maxVal int) schema.SchemaValidateFunc {
+// is of type string and has length between min and max (inclusive)
+func StringLenBetween(min, max int) schema.SchemaValidateFunc {
 	return func(i interface{}, k string) (warnings []string, errors []error) {
 		v, ok := i.(string)
 		if !ok {
@@ -79,8 +76,8 @@ func StringLenBetween(minVal, maxVal int) schema.SchemaValidateFunc {
 			return warnings, errors
 		}
 
-		if len(v) < minVal || len(v) > maxVal {
-			errors = append(errors, fmt.Errorf("expected length of %s to be in the range (%d - %d), got %s", k, minVal, maxVal, v))
+		if len(v) < min || len(v) > max {
+			errors = append(errors, fmt.Errorf("expected length of %s to be in the range (%d - %d), got %s", k, min, max, v))
 		}
 
 		return warnings, errors
@@ -146,7 +143,7 @@ func StringInSlice(valid []string, ignoreCase bool) schema.SchemaValidateFunc {
 			}
 		}
 
-		errors = append(errors, fmt.Errorf("expected %s to be one of %q, got %s", k, valid, v))
+		errors = append(errors, fmt.Errorf("expected %s to be one of %v, got %s", k, valid, v))
 		return warnings, errors
 	}
 }

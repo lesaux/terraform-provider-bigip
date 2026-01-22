@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package hcl2shim
 
 import (
@@ -187,8 +184,8 @@ func valuesSDKEquivalentMappings(a, b cty.Value) bool {
 // precision in the round-trip.
 //
 // This does _not_ attempt to allow for an epsilon difference that may be
-// caused by accumulated inaccuracy in a float calculation, under the
-// expectation that providers generally do not actually do computations on
+// caused by accumulated innacuracy in a float calculation, under the
+// expectation that providers generally do not actually do compuations on
 // floats and instead just pass string representations of them on verbatim
 // to remote APIs. A remote API _itself_ may introduce inaccuracy, but that's
 // a problem for the provider itself to deal with, based on its knowledge of

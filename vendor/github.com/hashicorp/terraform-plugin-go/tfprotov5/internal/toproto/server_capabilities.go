@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package toproto
 
 import (
@@ -8,16 +5,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/tfplugin5"
 )
 
-func ServerCapabilities(in *tfprotov5.ServerCapabilities) *tfplugin5.ServerCapabilities {
+func GetProviderSchema_ServerCapabilities(in *tfprotov5.ServerCapabilities) *tfplugin5.GetProviderSchema_ServerCapabilities {
 	if in == nil {
 		return nil
 	}
 
-	resp := &tfplugin5.ServerCapabilities{
-		GetProviderSchemaOptional: in.GetProviderSchemaOptional,
-		MoveResourceState:         in.MoveResourceState,
-		PlanDestroy:               in.PlanDestroy,
+	return &tfplugin5.GetProviderSchema_ServerCapabilities{
+		PlanDestroy: in.PlanDestroy,
 	}
-
-	return resp
 }

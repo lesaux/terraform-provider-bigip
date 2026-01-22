@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package hclsyntax
 
 import (
@@ -42,7 +39,7 @@ type Body struct {
 }
 
 // Assert that *Body implements hcl.Body
-var _ hcl.Body = &Body{}
+var assertBodyImplBody hcl.Body = &Body{}
 
 func (b *Body) walkChildNodes(w internalWalkFunc) {
 	w(b.Attributes)

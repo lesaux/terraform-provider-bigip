@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package validation
 
 import (
@@ -11,8 +8,8 @@ import (
 )
 
 // IntBetween returns a SchemaValidateFunc which tests if the provided value
-// is of type int and is between minVal and maxVal (inclusive)
-func IntBetween(minVal, maxVal int) schema.SchemaValidateFunc {
+// is of type int and is between min and max (inclusive)
+func IntBetween(min, max int) schema.SchemaValidateFunc {
 	return func(i interface{}, k string) (warnings []string, errors []error) {
 		v, ok := i.(int)
 		if !ok {
@@ -20,8 +17,8 @@ func IntBetween(minVal, maxVal int) schema.SchemaValidateFunc {
 			return warnings, errors
 		}
 
-		if v < minVal || v > maxVal {
-			errors = append(errors, fmt.Errorf("expected %s to be in the range (%d - %d), got %d", k, minVal, maxVal, v))
+		if v < min || v > max {
+			errors = append(errors, fmt.Errorf("expected %s to be in the range (%d - %d), got %d", k, min, max, v))
 			return warnings, errors
 		}
 
@@ -30,8 +27,8 @@ func IntBetween(minVal, maxVal int) schema.SchemaValidateFunc {
 }
 
 // IntAtLeast returns a SchemaValidateFunc which tests if the provided value
-// is of type int and is at least minVal (inclusive)
-func IntAtLeast(minVal int) schema.SchemaValidateFunc {
+// is of type int and is at least min (inclusive)
+func IntAtLeast(min int) schema.SchemaValidateFunc {
 	return func(i interface{}, k string) (warnings []string, errors []error) {
 		v, ok := i.(int)
 		if !ok {
@@ -39,8 +36,8 @@ func IntAtLeast(minVal int) schema.SchemaValidateFunc {
 			return warnings, errors
 		}
 
-		if v < minVal {
-			errors = append(errors, fmt.Errorf("expected %s to be at least (%d), got %d", k, minVal, v))
+		if v < min {
+			errors = append(errors, fmt.Errorf("expected %s to be at least (%d), got %d", k, min, v))
 			return warnings, errors
 		}
 
@@ -49,8 +46,8 @@ func IntAtLeast(minVal int) schema.SchemaValidateFunc {
 }
 
 // IntAtMost returns a SchemaValidateFunc which tests if the provided value
-// is of type int and is at most maxVal (inclusive)
-func IntAtMost(maxVal int) schema.SchemaValidateFunc {
+// is of type int and is at most max (inclusive)
+func IntAtMost(max int) schema.SchemaValidateFunc {
 	return func(i interface{}, k string) (warnings []string, errors []error) {
 		v, ok := i.(int)
 		if !ok {
@@ -58,8 +55,8 @@ func IntAtMost(maxVal int) schema.SchemaValidateFunc {
 			return warnings, errors
 		}
 
-		if v > maxVal {
-			errors = append(errors, fmt.Errorf("expected %s to be at most (%d), got %d", k, maxVal, v))
+		if v > max {
+			errors = append(errors, fmt.Errorf("expected %s to be at most (%d), got %d", k, max, v))
 			return warnings, errors
 		}
 

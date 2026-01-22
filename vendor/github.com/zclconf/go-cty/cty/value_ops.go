@@ -2,7 +2,6 @@ package cty
 
 import (
 	"fmt"
-	"iter"
 	"math/big"
 
 	"github.com/zclconf/go-cty/cty/set"
@@ -14,7 +13,7 @@ func (val Value) GoString() string {
 	if val.IsMarked() {
 		unVal, marks := val.Unmark()
 		if len(marks) == 1 {
-			var mark any
+			var mark interface{}
 			for m := range marks {
 				mark = m
 			}
@@ -34,17 +33,7 @@ func (val Value) GoString() string {
 		return "cty.DynamicVal"
 	}
 	if !val.IsKnown() {
-		rfn := val.v.(*unknownType).refinement
-		var suffix string
-		if rfn != nil {
-			calls := rfn.GoString()
-			if calls == ".NotNull()" {
-				suffix = ".RefineNotNull()"
-			} else {
-				suffix = ".Refine()" + rfn.GoString() + ".NewValue()"
-			}
-		}
-		return fmt.Sprintf("cty.UnknownVal(%#v)%s", val.ty, suffix)
+		return fmt.Sprintf("cty.UnknownVal(%#v)", val.ty)
 	}
 
 	// By the time we reach here we've dealt with all of the exceptions around
@@ -136,38 +125,13 @@ func (val Value) Equals(other Value) Value {
 		return val.Equals(other).WithMarks(valMarks, otherMarks)
 	}
 
-	// Some easy cases with comparisons to null.
-	switch {
-	case val.IsNull() && definitelyNotNull(other):
-		return False
-	case other.IsNull() && definitelyNotNull(val):
-		return False
-	}
-	// If we have one known value and one unknown value then we may be
-	// able to quickly disqualify equality based on the range of the unknown
-	// value.
-	if val.IsKnown() && !other.IsKnown() {
-		otherRng := other.Range()
-		if ok := otherRng.Includes(val); ok.IsKnown() && ok.False() {
-			return False
-		}
-	} else if other.IsKnown() && !val.IsKnown() {
-		valRng := val.Range()
-		if ok := valRng.Includes(other); ok.IsKnown() && ok.False() {
-			return False
-		}
-	}
-
-	// We need to deal with unknown values before anything else with nulls
-	// because any unknown value that hasn't yet been refined as non-null
-	// could become null, and nulls of any types are equal to one another.
-	unknownResult := func() Value {
-		return UnknownVal(Bool).Refine().NotNull().NewValue()
-	}
+	// Start by handling Unknown values before considering types.
+	// This needs to be done since Null values are always equal regardless of
+	// type.
 	switch {
 	case !val.IsKnown() && !other.IsKnown():
 		// both unknown
-		return unknownResult()
+		return UnknownVal(Bool)
 	case val.IsKnown() && !other.IsKnown():
 		switch {
 		case val.IsNull(), other.ty.HasDynamicTypes():
@@ -175,13 +139,13 @@ func (val Value) Equals(other Value) Value {
 			// nulls of any type are equal.
 			// An unknown with a dynamic type compares as unknown, which we need
 			// to check before the type comparison below.
-			return unknownResult()
+			return UnknownVal(Bool)
 		case !val.ty.Equals(other.ty):
 			// There is no null comparison or dynamic types, so unequal types
 			// will never be equal.
 			return False
 		default:
-			return unknownResult()
+			return UnknownVal(Bool)
 		}
 	case other.IsKnown() && !val.IsKnown():
 		switch {
@@ -190,13 +154,13 @@ func (val Value) Equals(other Value) Value {
 			// nulls of any type are equal.
 			// An unknown with a dynamic type compares as unknown, which we need
 			// to check before the type comparison below.
-			return unknownResult()
+			return UnknownVal(Bool)
 		case !other.ty.Equals(val.ty):
 			// There's no null comparison or dynamic types, so unequal types
 			// will never be equal.
 			return False
 		default:
-			return unknownResult()
+			return UnknownVal(Bool)
 		}
 	}
 
@@ -218,7 +182,7 @@ func (val Value) Equals(other Value) Value {
 			return BoolVal(false)
 		}
 
-		return unknownResult()
+		return UnknownVal(Bool)
 	}
 
 	if !val.ty.Equals(other.ty) {
@@ -244,15 +208,15 @@ func (val Value) Equals(other Value) Value {
 		for attr, aty := range oty.AttrTypes {
 			lhs := Value{
 				ty: aty,
-				v:  val.v.(map[string]any)[attr],
+				v:  val.v.(map[string]interface{})[attr],
 			}
 			rhs := Value{
 				ty: aty,
-				v:  other.v.(map[string]any)[attr],
+				v:  other.v.(map[string]interface{})[attr],
 			}
 			eq := lhs.Equals(rhs)
 			if !eq.IsKnown() {
-				return unknownResult()
+				return UnknownVal(Bool)
 			}
 			if eq.False() {
 				result = false
@@ -265,15 +229,15 @@ func (val Value) Equals(other Value) Value {
 		for i, ety := range tty.ElemTypes {
 			lhs := Value{
 				ty: ety,
-				v:  val.v.([]any)[i],
+				v:  val.v.([]interface{})[i],
 			}
 			rhs := Value{
 				ty: ety,
-				v:  other.v.([]any)[i],
+				v:  other.v.([]interface{})[i],
 			}
 			eq := lhs.Equals(rhs)
 			if !eq.IsKnown() {
-				return unknownResult()
+				return UnknownVal(Bool)
 			}
 			if eq.False() {
 				result = false
@@ -282,20 +246,20 @@ func (val Value) Equals(other Value) Value {
 		}
 	case ty.IsListType():
 		ety := ty.typeImpl.(typeList).ElementTypeT
-		if len(val.v.([]any)) == len(other.v.([]any)) {
+		if len(val.v.([]interface{})) == len(other.v.([]interface{})) {
 			result = true
-			for i := range val.v.([]any) {
+			for i := range val.v.([]interface{}) {
 				lhs := Value{
 					ty: ety,
-					v:  val.v.([]any)[i],
+					v:  val.v.([]interface{})[i],
 				}
 				rhs := Value{
 					ty: ety,
-					v:  other.v.([]any)[i],
+					v:  other.v.([]interface{})[i],
 				}
 				eq := lhs.Equals(rhs)
 				if !eq.IsKnown() {
-					return unknownResult()
+					return UnknownVal(Bool)
 				}
 				if eq.False() {
 					result = false
@@ -304,16 +268,16 @@ func (val Value) Equals(other Value) Value {
 			}
 		}
 	case ty.IsSetType():
-		s1 := val.v.(set.Set[any])
-		s2 := other.v.(set.Set[any])
+		s1 := val.v.(set.Set[interface{}])
+		s2 := other.v.(set.Set[interface{}])
 		equal := true
 
 		// Two sets are equal if all of their values are known and all values
 		// in one are also in the other.
 		for it := s1.Iterator(); it.Next(); {
 			rv := it.Value()
-			if _, unknown := rv.(*unknownType); unknown { // "*unknownType" is the internal representation of unknown-ness
-				return unknownResult()
+			if rv == unknown { // "unknown" is the internal representation of unknown-ness
+				return UnknownVal(Bool)
 			}
 			if !s2.Has(rv) {
 				equal = false
@@ -321,8 +285,8 @@ func (val Value) Equals(other Value) Value {
 		}
 		for it := s2.Iterator(); it.Next(); {
 			rv := it.Value()
-			if _, unknown := rv.(*unknownType); unknown { // "*unknownType" is the internal representation of unknown-ness
-				return unknownResult()
+			if rv == unknown { // "unknown" is the internal representation of unknown-ness
+				return UnknownVal(Bool)
 			}
 			if !s1.Has(rv) {
 				equal = false
@@ -332,24 +296,24 @@ func (val Value) Equals(other Value) Value {
 		result = equal
 	case ty.IsMapType():
 		ety := ty.typeImpl.(typeMap).ElementTypeT
-		if len(val.v.(map[string]any)) == len(other.v.(map[string]any)) {
+		if len(val.v.(map[string]interface{})) == len(other.v.(map[string]interface{})) {
 			result = true
-			for k := range val.v.(map[string]any) {
-				if _, ok := other.v.(map[string]any)[k]; !ok {
+			for k := range val.v.(map[string]interface{}) {
+				if _, ok := other.v.(map[string]interface{})[k]; !ok {
 					result = false
 					break
 				}
 				lhs := Value{
 					ty: ety,
-					v:  val.v.(map[string]any)[k],
+					v:  val.v.(map[string]interface{})[k],
 				}
 				rhs := Value{
 					ty: ety,
-					v:  other.v.(map[string]any)[k],
+					v:  other.v.(map[string]interface{})[k],
 				}
 				eq := lhs.Equals(rhs)
 				if !eq.IsKnown() {
-					return unknownResult()
+					return UnknownVal(Bool)
 				}
 				if eq.False() {
 					result = false
@@ -429,17 +393,7 @@ func (val Value) RawEquals(other Value) bool {
 	other = other.unmarkForce()
 
 	if (!val.IsKnown()) && (!other.IsKnown()) {
-		// If either unknown value has refinements then they must match.
-		valRfn := val.v.(*unknownType).refinement
-		otherRfn := other.v.(*unknownType).refinement
-		switch {
-		case (valRfn == nil) != (otherRfn == nil):
-			return false
-		case valRfn != nil:
-			return valRfn.rawEqual(otherRfn)
-		default:
-			return true
-		}
+		return true
 	}
 	if (val.IsKnown() && !other.IsKnown()) || (other.IsKnown() && !val.IsKnown()) {
 		return false
@@ -463,11 +417,11 @@ func (val Value) RawEquals(other Value) bool {
 		for attr, aty := range oty.AttrTypes {
 			lhs := Value{
 				ty: aty,
-				v:  val.v.(map[string]any)[attr],
+				v:  val.v.(map[string]interface{})[attr],
 			}
 			rhs := Value{
 				ty: aty,
-				v:  other.v.(map[string]any)[attr],
+				v:  other.v.(map[string]interface{})[attr],
 			}
 			eq := lhs.RawEquals(rhs)
 			if !eq {
@@ -480,11 +434,11 @@ func (val Value) RawEquals(other Value) bool {
 		for i, ety := range tty.ElemTypes {
 			lhs := Value{
 				ty: ety,
-				v:  val.v.([]any)[i],
+				v:  val.v.([]interface{})[i],
 			}
 			rhs := Value{
 				ty: ety,
-				v:  other.v.([]any)[i],
+				v:  other.v.([]interface{})[i],
 			}
 			eq := lhs.RawEquals(rhs)
 			if !eq {
@@ -494,15 +448,15 @@ func (val Value) RawEquals(other Value) bool {
 		return true
 	case ty.IsListType():
 		ety := ty.typeImpl.(typeList).ElementTypeT
-		if len(val.v.([]any)) == len(other.v.([]any)) {
-			for i := range val.v.([]any) {
+		if len(val.v.([]interface{})) == len(other.v.([]interface{})) {
+			for i := range val.v.([]interface{}) {
 				lhs := Value{
 					ty: ety,
-					v:  val.v.([]any)[i],
+					v:  val.v.([]interface{})[i],
 				}
 				rhs := Value{
 					ty: ety,
-					v:  other.v.([]any)[i],
+					v:  other.v.([]interface{})[i],
 				}
 				eq := lhs.RawEquals(rhs)
 				if !eq {
@@ -546,18 +500,18 @@ func (val Value) RawEquals(other Value) bool {
 		}
 		valUn, _ := val.Unmark()
 		otherUn, _ := other.Unmark()
-		if len(valUn.v.(map[string]any)) == len(otherUn.v.(map[string]any)) {
-			for k := range valUn.v.(map[string]any) {
-				if _, ok := otherUn.v.(map[string]any)[k]; !ok {
+		if len(valUn.v.(map[string]interface{})) == len(otherUn.v.(map[string]interface{})) {
+			for k := range valUn.v.(map[string]interface{}) {
+				if _, ok := otherUn.v.(map[string]interface{})[k]; !ok {
 					return false
 				}
 				lhs := Value{
 					ty: ety,
-					v:  valUn.v.(map[string]any)[k],
+					v:  valUn.v.(map[string]interface{})[k],
 				}
 				rhs := Value{
 					ty: ety,
-					v:  otherUn.v.(map[string]any)[k],
+					v:  otherUn.v.(map[string]interface{})[k],
 				}
 				eq := lhs.RawEquals(rhs)
 				if !eq {
@@ -594,8 +548,7 @@ func (val Value) Add(other Value) Value {
 
 	if shortCircuit := mustTypeCheck(Number, Number, val, other); shortCircuit != nil {
 		shortCircuit = forceShortCircuitType(shortCircuit, Number)
-		ret := shortCircuit.RefineWith(numericRangeArithmetic(Value.Add, val.Range(), other.Range()))
-		return ret.RefineNotNull()
+		return *shortCircuit
 	}
 
 	ret := new(big.Float)
@@ -614,8 +567,7 @@ func (val Value) Subtract(other Value) Value {
 
 	if shortCircuit := mustTypeCheck(Number, Number, val, other); shortCircuit != nil {
 		shortCircuit = forceShortCircuitType(shortCircuit, Number)
-		ret := shortCircuit.RefineWith(numericRangeArithmetic(Value.Subtract, val.Range(), other.Range()))
-		return ret.RefineNotNull()
+		return *shortCircuit
 	}
 
 	return val.Add(other.Negate())
@@ -631,7 +583,7 @@ func (val Value) Negate() Value {
 
 	if shortCircuit := mustTypeCheck(Number, Number, val); shortCircuit != nil {
 		shortCircuit = forceShortCircuitType(shortCircuit, Number)
-		return (*shortCircuit).RefineNotNull()
+		return *shortCircuit
 	}
 
 	ret := new(big.Float).Neg(val.v.(*big.Float))
@@ -648,14 +600,8 @@ func (val Value) Multiply(other Value) Value {
 	}
 
 	if shortCircuit := mustTypeCheck(Number, Number, val, other); shortCircuit != nil {
-		// If either value is exactly zero then the result must either be
-		// zero or an error.
-		if val == Zero || other == Zero {
-			return Zero
-		}
 		shortCircuit = forceShortCircuitType(shortCircuit, Number)
-		ret := shortCircuit.RefineWith(numericRangeArithmetic(Value.Multiply, val.Range(), other.Range()))
-		return ret.RefineNotNull()
+		return *shortCircuit
 	}
 
 	// find the larger precision of the arguments
@@ -700,10 +646,7 @@ func (val Value) Divide(other Value) Value {
 
 	if shortCircuit := mustTypeCheck(Number, Number, val, other); shortCircuit != nil {
 		shortCircuit = forceShortCircuitType(shortCircuit, Number)
-		// TODO: We could potentially refine the range of the result here, but
-		// we don't right now because our division operation is not monotone
-		// if the denominator could potentially be zero.
-		return (*shortCircuit).RefineNotNull()
+		return *shortCircuit
 	}
 
 	ret := new(big.Float)
@@ -735,7 +678,7 @@ func (val Value) Modulo(other Value) Value {
 
 	if shortCircuit := mustTypeCheck(Number, Number, val, other); shortCircuit != nil {
 		shortCircuit = forceShortCircuitType(shortCircuit, Number)
-		return (*shortCircuit).RefineNotNull()
+		return *shortCircuit
 	}
 
 	// We cheat a bit here with infinities, just abusing the Multiply operation
@@ -773,7 +716,7 @@ func (val Value) Absolute() Value {
 
 	if shortCircuit := mustTypeCheck(Number, Number, val); shortCircuit != nil {
 		shortCircuit = forceShortCircuitType(shortCircuit, Number)
-		return (*shortCircuit).Refine().NotNull().NumberRangeInclusive(Zero, UnknownVal(Number)).NewValue()
+		return *shortCircuit
 	}
 
 	ret := (&big.Float{}).Abs(val.v.(*big.Float))
@@ -817,7 +760,7 @@ func (val Value) GetAttr(name string) Value {
 
 	return Value{
 		ty: attrType,
-		v:  val.v.(map[string]any)[name],
+		v:  val.v.(map[string]interface{})[name],
 	}
 }
 
@@ -873,7 +816,7 @@ func (val Value) Index(key Value) Value {
 
 		return Value{
 			ty: elty,
-			v:  val.v.([]any)[index],
+			v:  val.v.([]interface{})[index],
 		}
 	case val.Type().IsMapType():
 		elty := val.Type().ElementType()
@@ -896,7 +839,7 @@ func (val Value) Index(key Value) Value {
 
 		return Value{
 			ty: elty,
-			v:  val.v.(map[string]any)[keyStr],
+			v:  val.v.(map[string]interface{})[keyStr],
 		}
 	case val.Type().IsTupleType():
 		if key.Type() == DynamicPseudoType {
@@ -923,7 +866,7 @@ func (val Value) Index(key Value) Value {
 
 		return Value{
 			ty: eltys[index],
-			v:  val.v.([]any)[index],
+			v:  val.v.([]interface{})[index],
 		}
 	default:
 		panic("not a list, map, or tuple type")
@@ -946,23 +889,23 @@ func (val Value) HasIndex(key Value) Value {
 	}
 
 	if val.ty == DynamicPseudoType {
-		return UnknownVal(Bool).RefineNotNull()
+		return UnknownVal(Bool)
 	}
 
 	switch {
 	case val.Type().IsListType():
 		if key.Type() == DynamicPseudoType {
-			return UnknownVal(Bool).RefineNotNull()
+			return UnknownVal(Bool)
 		}
 
 		if key.Type() != Number {
 			return False
 		}
 		if !key.IsKnown() {
-			return UnknownVal(Bool).RefineNotNull()
+			return UnknownVal(Bool)
 		}
 		if !val.IsKnown() {
-			return UnknownVal(Bool).RefineNotNull()
+			return UnknownVal(Bool)
 		}
 
 		index, accuracy := key.v.(*big.Float).Int64()
@@ -970,36 +913,36 @@ func (val Value) HasIndex(key Value) Value {
 			return False
 		}
 
-		return BoolVal(int(index) < len(val.v.([]any)) && index >= 0)
+		return BoolVal(int(index) < len(val.v.([]interface{})) && index >= 0)
 	case val.Type().IsMapType():
 		if key.Type() == DynamicPseudoType {
-			return UnknownVal(Bool).RefineNotNull()
+			return UnknownVal(Bool)
 		}
 
 		if key.Type() != String {
 			return False
 		}
 		if !key.IsKnown() {
-			return UnknownVal(Bool).RefineNotNull()
+			return UnknownVal(Bool)
 		}
 		if !val.IsKnown() {
-			return UnknownVal(Bool).RefineNotNull()
+			return UnknownVal(Bool)
 		}
 
 		keyStr := key.v.(string)
-		_, exists := val.v.(map[string]any)[keyStr]
+		_, exists := val.v.(map[string]interface{})[keyStr]
 
 		return BoolVal(exists)
 	case val.Type().IsTupleType():
 		if key.Type() == DynamicPseudoType {
-			return UnknownVal(Bool).RefineNotNull()
+			return UnknownVal(Bool)
 		}
 
 		if key.Type() != Number {
 			return False
 		}
 		if !key.IsKnown() {
-			return UnknownVal(Bool).RefineNotNull()
+			return UnknownVal(Bool)
 		}
 
 		index, accuracy := key.v.(*big.Float).Int64()
@@ -1029,45 +972,22 @@ func (val Value) HasElement(elem Value) Value {
 	}
 
 	ty := val.Type()
-	unknownResult := UnknownVal(Bool).RefineNotNull()
 
-	if val.IsNull() {
-		panic("cannot HasElement on null value")
-	}
-	if !val.IsKnown() {
-		return unknownResult
-	}
-	if elem.Type() != DynamicPseudoType && val.Type().IsSetType() && val.Type().ElementType() != DynamicPseudoType {
-		// If we know the type of the given element and the element type of
-		// the set then they must match for the element to be present, because
-		// a set can't contain elements of any other type than its element type.
-		if !elem.Type().Equals(val.ty.ElementType()) {
-			return False
-		}
-	}
 	if !ty.IsSetType() {
 		panic("not a set type")
 	}
-	if !elem.IsKnown() {
-		return unknownResult
+	if !val.IsKnown() || !elem.IsKnown() {
+		return UnknownVal(Bool)
 	}
-	noMatchResult := False
-	if !val.IsWhollyKnown() {
-		// If the set has any unknown elements then a failure to find a
-		// known-value elem in it means that we don't know whether the
-		// element is present, rather than that it definitely isn't.
-		noMatchResult = unknownResult
+	if val.IsNull() {
+		panic("can't call HasElement on a nil value")
 	}
 	if !ty.ElementType().Equals(elem.Type()) {
-		// A set can only contain an element of its own element type
 		return False
 	}
 
-	s := val.v.(set.Set[any])
-	if !s.Has(elem.v) {
-		return noMatchResult
-	}
-	return True
+	s := val.v.(set.Set[interface{}])
+	return BoolVal(s.Has(elem.v))
 }
 
 // Length returns the length of the receiver, which must be a collection type
@@ -1092,10 +1012,7 @@ func (val Value) Length() Value {
 	}
 
 	if !val.IsKnown() {
-		// If the whole collection isn't known then the length isn't known
-		// either, but we can still put some bounds on the range of the result.
-		rng := val.Range()
-		return UnknownVal(Number).RefineWith(valueRefineLengthResult(rng))
+		return UnknownVal(Number)
 	}
 	if val.Type().IsSetType() {
 		// The Length rules are a little different for sets because if any
@@ -1103,7 +1020,7 @@ func (val Value) Length() Value {
 		// may or may not be equal to other elements in the set, and thus they
 		// may or may not coalesce with other elements and produce fewer
 		// items in the resulting set.
-		storeLength := int64(val.v.(set.Set[any]).Length())
+		storeLength := int64(val.v.(set.Set[interface{}]).Length())
 		if storeLength == 1 || val.IsWhollyKnown() {
 			// If our set is wholly known then we know its length.
 			//
@@ -1113,24 +1030,11 @@ func (val Value) Length() Value {
 			// unknown value cannot represent more than one known value.
 			return NumberIntVal(storeLength)
 		}
-		// Otherwise, we cannot predict the length exactly but we can at
-		// least constrain both bounds of its range, because value coalescing
-		// can only ever reduce the number of elements in the set.
-		return UnknownVal(Number).Refine().NotNull().NumberRangeInclusive(NumberIntVal(1), NumberIntVal(storeLength)).NewValue()
+		// Otherwise, we cannot predict the length.
+		return UnknownVal(Number)
 	}
 
 	return NumberIntVal(int64(val.LengthInt()))
-}
-
-func valueRefineLengthResult(collRng ValueRange) func(*RefinementBuilder) *RefinementBuilder {
-	return func(b *RefinementBuilder) *RefinementBuilder {
-		return b.
-			NotNull().
-			NumberRangeInclusive(
-				NumberIntVal(int64(collRng.LengthLowerBound())),
-				NumberIntVal(int64(collRng.LengthUpperBound())),
-			)
-	}
 }
 
 // LengthInt is like Length except it returns an int. It has the same behavior
@@ -1165,7 +1069,7 @@ func (val Value) LengthInt() int {
 	switch {
 
 	case val.ty.IsListType():
-		return len(val.v.([]any))
+		return len(val.v.([]interface{}))
 
 	case val.ty.IsSetType():
 		// NOTE: This is technically not correct in cases where the set
@@ -1177,59 +1081,40 @@ func (val Value) LengthInt() int {
 		// compatibility with callers that were relying on LengthInt rather
 		// than calling Length. Instead of panicking when a set contains an
 		// unknown value, LengthInt returns the largest possible length.
-		return val.v.(set.Set[any]).Length()
+		return val.v.(set.Set[interface{}]).Length()
 
 	case val.ty.IsMapType():
-		return len(val.v.(map[string]any))
+		return len(val.v.(map[string]interface{}))
 
 	default:
 		panic("value is not a collection")
 	}
 }
 
-// Elements returns an iterable sequence over the elements of the reciever,
-// which must be a collection type, a tuple type, or an object type.
-// If called on a value of any other type, this method will panic.
-// The value must also be known, non-null, and unmarked, or this method will
-// panic.
-//
-// Use [Value.CanIterateElements] to check dynamically if a particular value
-// can support this method without panicking.
-//
-// The two values in each iteration represent a key and a value respectively.
-//
-// If the receiver is of list type then the key is guaranteed to be of type
-// [Number] and the values are of the list's element type.
-//
-// The the reciever is of a map type then the key is guaranteed to be of type
-// [String] and the values are of the map's element type. Elements are
-// produced in ascending lexicographical order by key.
-//
-// If the receiver is of a set type then each element is returned as both the
-// key and the value, because set member values are their own identity.
-//
-// If the reciever is of a tuple type then the key is guaranteed to be of type
-// [Number] and the and the value types match the corresponding element types.
-//
-// If the reciever is of an object type then the key is guaranteed to be of
-// type [String] and the value types match the corresponding attribute types.
-func (val Value) Elements() iter.Seq2[Value, Value] {
-	return func(yield func(Value, Value) bool) {
-		for it := val.ElementIterator(); it.Next(); {
-			if !yield(it.Element()) {
-				break
-			}
-		}
-	}
-}
-
 // ElementIterator returns an ElementIterator for iterating the elements
 // of the receiver, which must be a collection type, a tuple type, or an object
 // type. If called on a method of any other type, this method will panic.
-// The value must be known and non-null, or this method will panic.
 //
-// The element iterator produces keys and values matching what's described
-// for [Value.Elements]. New code should prefer to use [Value.Elements].
+// The value must be Known and non-Null, or this method will panic.
+//
+// If the receiver is of a list type, the returned keys will be of type Number
+// and the values will be of the list's element type.
+//
+// If the receiver is of a map type, the returned keys will be of type String
+// and the value will be of the map's element type. Elements are passed in
+// ascending lexicographical order by key.
+//
+// If the receiver is of a set type, each element is returned as both the
+// key and the value, since set members are their own identity.
+//
+// If the receiver is of a tuple type, the returned keys will be of type Number
+// and the value will be of the corresponding element's type.
+//
+// If the receiver is of an object type, the returned keys will be of type
+// String and the value will be of the corresponding attributes's type.
+//
+// ElementIterator is an integration method, so it cannot handle Unknown
+// values. This method will panic if the receiver is Unknown.
 func (val Value) ElementIterator() ElementIterator {
 	val.assertUnmarked()
 	if !val.IsKnown() {
@@ -1242,7 +1127,7 @@ func (val Value) ElementIterator() ElementIterator {
 }
 
 // CanIterateElements returns true if the receiver can support the
-// Elements, ElementIterator, and ForEachElement methods without panic.
+// ElementIterator method (and by extension, ForEachElement) without panic.
 func (val Value) CanIterateElements() bool {
 	return canElementIterator(val)
 }
@@ -1252,9 +1137,7 @@ func (val Value) CanIterateElements() bool {
 // will panic.
 //
 // ForEachElement uses ElementIterator internally, and so the values passed
-// to the callback are as described for [Value.Elements]. New code should
-// prefer to use [Value.Elements] in a normal for loop instead of using this
-// method.
+// to the callback are as described for ElementIterator.
 //
 // Returns true if the iteration exited early due to the callback function
 // returning true, or false if the loop ran to completion.
@@ -1284,7 +1167,7 @@ func (val Value) Not() Value {
 
 	if shortCircuit := mustTypeCheck(Bool, Bool, val); shortCircuit != nil {
 		shortCircuit = forceShortCircuitType(shortCircuit, Bool)
-		return (*shortCircuit).RefineNotNull()
+		return *shortCircuit
 	}
 
 	return BoolVal(!val.v.(bool))
@@ -1300,14 +1183,8 @@ func (val Value) And(other Value) Value {
 	}
 
 	if shortCircuit := mustTypeCheck(Bool, Bool, val, other); shortCircuit != nil {
-		// If either value is known to be exactly False then it doesn't
-		// matter what the other value is, because the final result must
-		// either be False or an error.
-		if val == False || other == False {
-			return False
-		}
 		shortCircuit = forceShortCircuitType(shortCircuit, Bool)
-		return (*shortCircuit).RefineNotNull()
+		return *shortCircuit
 	}
 
 	return BoolVal(val.v.(bool) && other.v.(bool))
@@ -1323,14 +1200,8 @@ func (val Value) Or(other Value) Value {
 	}
 
 	if shortCircuit := mustTypeCheck(Bool, Bool, val, other); shortCircuit != nil {
-		// If either value is known to be exactly True then it doesn't
-		// matter what the other value is, because the final result must
-		// either be True or an error.
-		if val == True || other == True {
-			return True
-		}
 		shortCircuit = forceShortCircuitType(shortCircuit, Bool)
-		return (*shortCircuit).RefineNotNull()
+		return *shortCircuit
 	}
 
 	return BoolVal(val.v.(bool) || other.v.(bool))
@@ -1346,30 +1217,8 @@ func (val Value) LessThan(other Value) Value {
 	}
 
 	if shortCircuit := mustTypeCheck(Number, Bool, val, other); shortCircuit != nil {
-		// We might be able to return a known answer even with unknown inputs.
-		// FIXME: This is more conservative than it needs to be, because it
-		// treats all bounds as exclusive bounds.
-		valRng := val.Range()
-		otherRng := other.Range()
-		if valRng.TypeConstraint() == Number && other.Range().TypeConstraint() == Number {
-			valMax, _ := valRng.NumberUpperBound()
-			otherMin, _ := otherRng.NumberLowerBound()
-			if valMax.IsKnown() && otherMin.IsKnown() {
-				if r := valMax.LessThan(otherMin); r.True() {
-					return True
-				}
-			}
-			valMin, _ := valRng.NumberLowerBound()
-			otherMax, _ := otherRng.NumberUpperBound()
-			if valMin.IsKnown() && otherMax.IsKnown() {
-				if r := valMin.GreaterThan(otherMax); r.True() {
-					return False
-				}
-			}
-		}
-
 		shortCircuit = forceShortCircuitType(shortCircuit, Bool)
-		return (*shortCircuit).RefineNotNull()
+		return *shortCircuit
 	}
 
 	return BoolVal(val.v.(*big.Float).Cmp(other.v.(*big.Float)) < 0)
@@ -1385,30 +1234,8 @@ func (val Value) GreaterThan(other Value) Value {
 	}
 
 	if shortCircuit := mustTypeCheck(Number, Bool, val, other); shortCircuit != nil {
-		// We might be able to return a known answer even with unknown inputs.
-		// FIXME: This is more conservative than it needs to be, because it
-		// treats all bounds as exclusive bounds.
-		valRng := val.Range()
-		otherRng := other.Range()
-		if valRng.TypeConstraint() == Number && other.Range().TypeConstraint() == Number {
-			valMin, _ := valRng.NumberLowerBound()
-			otherMax, _ := otherRng.NumberUpperBound()
-			if valMin.IsKnown() && otherMax.IsKnown() {
-				if r := valMin.GreaterThan(otherMax); r.True() {
-					return True
-				}
-			}
-			valMax, _ := valRng.NumberUpperBound()
-			otherMin, _ := otherRng.NumberLowerBound()
-			if valMax.IsKnown() && otherMin.IsKnown() {
-				if r := valMax.LessThan(otherMin); r.True() {
-					return False
-				}
-			}
-		}
-
 		shortCircuit = forceShortCircuitType(shortCircuit, Bool)
-		return (*shortCircuit).RefineNotNull()
+		return *shortCircuit
 	}
 
 	return BoolVal(val.v.(*big.Float).Cmp(other.v.(*big.Float)) > 0)
@@ -1537,7 +1364,7 @@ func (val Value) AsValueSet() ValueSet {
 // The result is the same pointer that was passed to CapsuleVal to create
 // the value. Since cty considers values to be immutable, it is strongly
 // recommended to treat the encapsulated value itself as immutable too.
-func (val Value) EncapsulatedValue() any {
+func (val Value) EncapsulatedValue() interface{} {
 	val.assertUnmarked()
 	if !val.Type().IsCapsuleType() {
 		panic("not a capsule-typed value")

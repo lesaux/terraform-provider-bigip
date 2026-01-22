@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package schema
 
 import (
@@ -219,7 +216,7 @@ func (s *Set) add(item interface{}, computed bool) string {
 
 func (s *Set) hash(item interface{}) string {
 	code := s.F(item)
-	// Always return a non-negative hashcode.
+	// Always return a nonnegative hashcode.
 	if code < 0 {
 		code = -code
 	}

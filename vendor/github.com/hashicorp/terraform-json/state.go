@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package tfjson
 
 import (
@@ -35,10 +32,6 @@ type State struct {
 
 	// The values that make up the state.
 	Values *StateValues `json:"values,omitempty"`
-
-	// Checks contains the results of any conditional checks when Values was
-	// last updated.
-	Checks []CheckResultStatic `json:"checks,omitempty"`
 }
 
 // UseJSONNumber controls whether the State will be decoded using the
@@ -173,14 +166,6 @@ type StateResource struct {
 	// DeposedKey is set if the resource instance has been marked Deposed and
 	// will be destroyed on the next apply.
 	DeposedKey string `json:"deposed_key,omitempty"`
-
-	// The version of the resource identity schema the "identity" property
-	// conforms to.
-	IdentitySchemaVersion *uint64 `json:"identity_schema_version,omitempty"`
-
-	// The JSON representation of the resource identity, whose structure
-	// depends on the resource identity schema.
-	IdentityValues map[string]interface{} `json:"identity,omitempty"`
 }
 
 // StateOutput represents an output value in a common state

@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package hcl
 
 import (
@@ -49,7 +46,7 @@ func Index(collection, key cty.Value, srcRange *Range) (cty.Value, Diagnostics) 
 	ty := collection.Type()
 	kty := key.Type()
 	if kty == cty.DynamicPseudoType || ty == cty.DynamicPseudoType {
-		return cty.DynamicVal.WithSameMarks(collection), nil
+		return cty.DynamicVal, nil
 	}
 
 	switch {
@@ -87,9 +84,9 @@ func Index(collection, key cty.Value, srcRange *Range) (cty.Value, Diagnostics) 
 		has, _ := collection.HasIndex(key).Unmark()
 		if !has.IsKnown() {
 			if ty.IsTupleType() {
-				return cty.DynamicVal.WithSameMarks(collection), nil
+				return cty.DynamicVal, nil
 			} else {
-				return cty.UnknownVal(ty.ElementType()).WithSameMarks(collection), nil
+				return cty.UnknownVal(ty.ElementType()), nil
 			}
 		}
 		if has.False() {
@@ -195,8 +192,11 @@ func Index(collection, key cty.Value, srcRange *Range) (cty.Value, Diagnostics) 
 				},
 			}
 		}
+		if !collection.IsKnown() {
+			return cty.DynamicVal, nil
+		}
 		if !key.IsKnown() {
-			return cty.DynamicVal.WithSameMarks(collection), nil
+			return cty.DynamicVal, nil
 		}
 
 		key, _ = key.Unmark()
@@ -220,10 +220,6 @@ func Index(collection, key cty.Value, srcRange *Range) (cty.Value, Diagnostics) 
 					Subject:  srcRange,
 				},
 			}
-		}
-
-		if !collection.IsKnown() {
-			return cty.UnknownVal(ty.AttributeType(attrName)).WithSameMarks(collection), nil
 		}
 
 		return collection.GetAttr(attrName), nil
@@ -292,13 +288,13 @@ func GetAttr(obj cty.Value, attrName string, srcRange *Range) (cty.Value, Diagno
 		}
 
 		if !obj.IsKnown() {
-			return cty.UnknownVal(ty.AttributeType(attrName)).WithSameMarks(obj), nil
+			return cty.UnknownVal(ty.AttributeType(attrName)), nil
 		}
 
 		return obj.GetAttr(attrName), nil
 	case ty.IsMapType():
 		if !obj.IsKnown() {
-			return cty.UnknownVal(ty.ElementType()).WithSameMarks(obj), nil
+			return cty.UnknownVal(ty.ElementType()), nil
 		}
 
 		idx := cty.StringVal(attrName)
@@ -320,7 +316,7 @@ func GetAttr(obj cty.Value, attrName string, srcRange *Range) (cty.Value, Diagno
 
 		return obj.Index(idx), nil
 	case ty == cty.DynamicPseudoType:
-		return cty.DynamicVal.WithSameMarks(obj), nil
+		return cty.DynamicVal, nil
 	case ty.IsListType() && ty.ElementType().IsObjectType():
 		// It seems a common mistake to try to access attributes on a whole
 		// list of objects rather than on a specific individual element, so

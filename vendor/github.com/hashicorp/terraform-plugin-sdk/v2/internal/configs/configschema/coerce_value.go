@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package configschema
 
 import (
@@ -11,7 +8,7 @@ import (
 )
 
 // CoerceValue attempts to force the given value to conform to the type
-// implied by the receiver.
+// implied by the receiever.
 //
 // This is useful in situations where a configuration must be derived from
 // an already-decoded value. It is always better to decode directly from

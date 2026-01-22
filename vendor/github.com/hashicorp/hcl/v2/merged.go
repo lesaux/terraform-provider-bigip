@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package hcl
 
 import (
@@ -107,21 +104,23 @@ func (mb mergedBodies) JustAttributes() (Attributes, Diagnostics) {
 			diags = append(diags, thisDiags...)
 		}
 
-		for name, attr := range thisAttrs {
-			if existing := attrs[name]; existing != nil {
-				diags = diags.Append(&Diagnostic{
-					Severity: DiagError,
-					Summary:  "Duplicate argument",
-					Detail: fmt.Sprintf(
-						"Argument %q was already set at %s",
-						name, existing.NameRange.String(),
-					),
-					Subject: &attr.NameRange,
-				})
-				continue
-			}
+		if thisAttrs != nil {
+			for name, attr := range thisAttrs {
+				if existing := attrs[name]; existing != nil {
+					diags = diags.Append(&Diagnostic{
+						Severity: DiagError,
+						Summary:  "Duplicate argument",
+						Detail: fmt.Sprintf(
+							"Argument %q was already set at %s",
+							name, existing.NameRange.String(),
+						),
+						Subject: &attr.NameRange,
+					})
+					continue
+				}
 
-			attrs[name] = attr
+				attrs[name] = attr
+			}
 		}
 	}
 

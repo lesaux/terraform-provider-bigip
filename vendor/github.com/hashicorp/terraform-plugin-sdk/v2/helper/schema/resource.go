@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package schema
 
 import (
@@ -56,24 +53,12 @@ var ReservedResourceFields = []string{
 // being implemented.
 type Resource struct {
 	// Schema is the structure and type information for this component. This
-	// field, or SchemaFunc, is required for all Resource concepts. To prevent
-	// storing all schema information in memory for the lifecycle of a provider,
-	// use SchemaFunc instead.
+	// field is required for all Resource concepts.
 	//
 	// The keys of this map are the names used in a practitioner configuration,
 	// such as the attribute or block name. The values describe the structure
 	// and type information of that attribute or block.
 	Schema map[string]*Schema
-
-	// SchemaFunc is the structure and type information for this component. This
-	// field, or Schema, is required for all Resource concepts. Use this field
-	// instead of Schema on top level Resource declarations to prevent storing
-	// all schema information in memory for the lifecycle of a provider.
-	//
-	// The keys of this map are the names used in a practitioner configuration,
-	// such as the attribute or block name. The values describe the structure
-	// and type information of that attribute or block.
-	SchemaFunc func() map[string]*Schema
 
 	// SchemaVersion is the version number for this resource's Schema
 	// definition. This field is only valid when the Resource is a managed
@@ -88,12 +73,6 @@ type Resource struct {
 	// When unset, SchemaVersion defaults to 0, so provider authors can start
 	// their Versioning at any integer >= 1
 	SchemaVersion int
-
-	// Identity is a nested structure containing information about the structure
-	// and type of this resource's identity. This field is only valid when the
-	// Resource is a managed resource.
-	// This field, is optional.
-	Identity *ResourceIdentity
 
 	// MigrateState is responsible for updating an InstanceState with an old
 	// version to the format expected by the current version of the Schema.
@@ -195,7 +174,7 @@ type Resource struct {
 	// This implementation is optional. If omitted, all Schema must enable
 	// the ForceNew field and any practitioner changes that would have
 	// caused and update will instead destroy and recreate the infrastructure
-	// component.
+	// compontent.
 	//
 	// The *ResourceData parameter contains the plan and state data for this
 	// managed resource instance. The available data in the Get* methods is the
@@ -327,7 +306,7 @@ type Resource struct {
 	// This implementation is optional. If omitted, all Schema must enable
 	// the ForceNew field and any practitioner changes that would have
 	// caused and update will instead destroy and recreate the infrastructure
-	// component.
+	// compontent.
 	//
 	// The Context parameter stores SDK information, such as loggers and
 	// timeout deadlines. It also is wired to receive any cancellation from
@@ -466,7 +445,7 @@ type Resource struct {
 	// This implementation is optional. If omitted, all Schema must enable
 	// the ForceNew field and any practitioner changes that would have
 	// caused and update will instead destroy and recreate the infrastructure
-	// component.
+	// compontent.
 	//
 	// The Context parameter stores SDK information, such as loggers. It also
 	// is wired to receive any cancellation from Terraform such as a system or
@@ -601,127 +580,6 @@ type Resource struct {
 	// See github.com/hashicorp/terraform-plugin-sdk/issues/655 for more
 	// details.
 	UseJSONNumber bool
-
-	// EnableLegacyTypeSystemApplyErrors when enabled will prevent the SDK from
-	// setting the legacy type system flag in the protocol during
-	// ApplyResourceChange (Create, Update, and Delete) operations. Before
-	// enabling this setting in a production release for a resource, the
-	// resource should be exhaustively acceptance tested with the setting
-	// enabled in an environment where it is easy to clean up resources,
-	// potentially outside of Terraform, since these errors may be unavoidable
-	// in certain cases.
-	//
-	// Disabling the legacy type system protocol flag is an unsafe operation
-	// when using this SDK as there are certain unavoidable behaviors imposed
-	// by the SDK, however this option is surfaced to allow provider developers
-	// to try to discover fixable data inconsistency errors more easily.
-	// Terraform, when encountering an enabled legacy type system protocol flag,
-	// will demote certain schema and data consistency errors into warning logs
-	// containing the text "legacy plugin SDK". Some errors for errant schema
-	// definitions, such as when an attribute is not marked as Computed as
-	// expected by Terraform, can only be resolved by migrating to
-	// terraform-plugin-framework since that SDK does not impose behavior
-	// changes with it enabled. However, data-based errors typically require
-	// logic fixes that should be applicable for both SDKs to be resolved.
-	EnableLegacyTypeSystemApplyErrors bool
-
-	// EnableLegacyTypeSystemPlanErrors when enabled will prevent the SDK from
-	// setting the legacy type system flag in the protocol during
-	// PlanResourceChange operations. Before enabling this setting in a
-	// production release for a resource, the resource should be exhaustively
-	// acceptance tested with the setting enabled in an environment where it is
-	// easy to clean up resources, potentially outside of Terraform, since these
-	// errors may be unavoidable in certain cases.
-	//
-	// Disabling the legacy type system protocol flag is an unsafe operation
-	// when using this SDK as there are certain unavoidable behaviors imposed
-	// by the SDK, however this option is surfaced to allow provider developers
-	// to try to discover fixable data inconsistency errors more easily.
-	// Terraform, when encountering an enabled legacy type system protocol flag,
-	// will demote certain schema and data consistency errors into warning logs
-	// containing the text "legacy plugin SDK". Some errors for errant schema
-	// definitions, such as when an attribute is not marked as Computed as
-	// expected by Terraform, can only be resolved by migrating to
-	// terraform-plugin-framework since that SDK does not impose behavior
-	// changes with it enabled. However, data-based errors typically require
-	// logic fixes that should be applicable for both SDKs to be resolved.
-	EnableLegacyTypeSystemPlanErrors bool
-
-	// ResourceBehavior is used to control SDK-specific logic when
-	// interacting with this resource.
-	ResourceBehavior ResourceBehavior
-
-	// ValidateRawResourceConfigFuncs allows functions to define arbitrary validation
-	// logic during the ValidateResourceTypeConfig RPC. ValidateRawResourceConfigFunc receives
-	// the client capabilities from the ValidateResourceTypeConfig RPC and the raw cty
-	// config value for the entire resource before it is shimmed, and it can return error
-	// diagnostics based on the inspection of those values.
-	//
-	// ValidateRawResourceConfigFuncs is only valid for Managed Resource types and will not be
-	// called for Data Resource or Provider types.
-	//
-	// Developers should prefer other validation methods first as this validation function
-	// deals with raw cty values.
-	ValidateRawResourceConfigFuncs []ValidateRawResourceConfigFunc
-}
-
-// ResourceBehavior controls SDK-specific logic when interacting
-// with a resource.
-type ResourceBehavior struct {
-	// ProviderDeferred enables provider-defined logic to be executed
-	// in the case of a deferred response from (Provider).ConfigureProvider.
-	//
-	// NOTE: This functionality is related to deferred action support, which is currently experimental and is subject
-	// to change or break without warning. It is not protected by version compatibility guarantees.
-	ProviderDeferred ProviderDeferredBehavior
-
-	// MutableIdentity indicates that the managed resource supports an identity that can change during the
-	// resource's lifecycle. Setting this flag to true will disable the SDK validation that ensures identity
-	// data doesn't change during RPC calls.
-	MutableIdentity bool
-}
-
-// ProviderDeferredBehavior enables provider-defined logic to be executed
-// in the case of a deferred response from provider configuration.
-//
-// NOTE: This functionality is related to deferred action support, which is currently experimental and is subject
-// to change or break without warning. It is not protected by version compatibility guarantees.
-type ProviderDeferredBehavior struct {
-	// When EnablePlanModification is true, the SDK will execute provider-defined logic
-	// during plan (CustomizeDiff, Default, DiffSuppressFunc, etc.) if ConfigureProvider
-	// returns a deferred response. The SDK will then automatically return a deferred response
-	// along with the modified plan.
-	EnablePlanModification bool
-}
-
-// ValidateRawResourceConfigFunc is a function used to validate the raw resource config
-// and has Diagnostic support. it is only valid for Managed Resource types and will not be
-// called for Data Resource or Block types.
-type ValidateRawResourceConfigFunc func(context.Context, ValidateResourceConfigFuncRequest, *ValidateResourceConfigFuncResponse)
-
-type ValidateResourceConfigFuncRequest struct {
-	// WriteOnlyAttributesAllowed indicates that the Terraform client
-	// initiating the request supports write-only attributes for managed
-	// resources.
-	WriteOnlyAttributesAllowed bool
-
-	// The raw config value provided by Terraform core
-	RawConfig cty.Value
-}
-
-type ValidateResourceConfigFuncResponse struct {
-	Diagnostics diag.Diagnostics
-}
-
-// SchemaMap returns the schema information for this Resource whether it is
-// defined via the SchemaFunc field or Schema field. The SchemaFunc field, if
-// defined, takes precedence over the Schema field.
-func (r *Resource) SchemaMap() map[string]*Schema {
-	if r.SchemaFunc != nil {
-		return r.SchemaFunc()
-	}
-
-	return r.Schema
 }
 
 // ShimInstanceStateFromValue converts a cty.Value to a
@@ -733,7 +591,7 @@ func (r *Resource) ShimInstanceStateFromValue(state cty.Value) (*terraform.Insta
 
 	// We now rebuild the state through the ResourceData, so that the set indexes
 	// match what helper/schema expects.
-	data, err := schemaMapWithIdentity{r.SchemaMap(), r.Identity.SchemaMap()}.Data(s, nil)
+	data, err := schemaMap(r.Schema).Data(s, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -791,7 +649,7 @@ type StateUpgrader struct {
 
 	// Upgrade takes the JSON encoded state and the provider meta value, and
 	// upgrades the state one single schema version. The provided state is
-	// decoded into the default json types using a map[string]interface{}. It
+	// deocded into the default json types using a map[string]interface{}. It
 	// is up to the StateUpgradeFunc to ensure that the returned value can be
 	// encoded using the new schema.
 	Upgrade StateUpgradeFunc
@@ -906,8 +764,7 @@ func (r *Resource) Apply(
 	s *terraform.InstanceState,
 	d *terraform.InstanceDiff,
 	meta interface{}) (*terraform.InstanceState, diag.Diagnostics) {
-	schema := schemaMapWithIdentity{r.SchemaMap(), r.Identity.SchemaMap()}
-	data, err := schema.Data(s, d)
+	data, err := schemaMap(r.Schema).Data(s, d)
 	if err != nil {
 		return s, diag.FromErr(err)
 	}
@@ -916,7 +773,7 @@ func (r *Resource) Apply(
 		data.providerMeta = s.ProviderMeta
 	}
 
-	// Instance Diff should have the timeout info, need to copy it over to the
+	// Instance Diff shoould have the timeout info, need to copy it over to the
 	// ResourceData meta
 	rt := ResourceTimeout{}
 	if _, ok := d.Meta[TimeoutKey]; ok {
@@ -964,7 +821,7 @@ func (r *Resource) Apply(
 		}
 
 		// Reset the data to be stateless since we just destroyed
-		data, err = schema.Data(nil, d)
+		data, err = schemaMap(r.Schema).Data(nil, d)
 		if err != nil {
 			return nil, append(diags, diag.FromErr(err)...)
 		}
@@ -1008,7 +865,7 @@ func (r *Resource) Diff(
 		return nil, fmt.Errorf("[ERR] Error decoding timeout: %s", err)
 	}
 
-	instanceDiff, err := schemaMap(r.SchemaMap()).Diff(ctx, s, c, r.CustomizeDiff, meta, true)
+	instanceDiff, err := schemaMap(r.Schema).Diff(ctx, s, c, r.CustomizeDiff, meta, true)
 	if err != nil {
 		return instanceDiff, err
 	}
@@ -1030,15 +887,13 @@ func (r *Resource) SimpleDiff(
 	c *terraform.ResourceConfig,
 	meta interface{}) (*terraform.InstanceDiff, error) {
 
-	// TODO: figure out if it makes sense to be able to set identity in CustomizeDiff at all
-	instanceDiff, err := schemaMapWithIdentity{r.SchemaMap(), r.Identity.SchemaMap()}.Diff(ctx, s, c, r.CustomizeDiff, meta, false)
+	instanceDiff, err := schemaMap(r.Schema).Diff(ctx, s, c, r.CustomizeDiff, meta, false)
 	if err != nil {
 		return instanceDiff, err
 	}
 
 	if instanceDiff == nil {
 		instanceDiff = terraform.NewInstanceDiff()
-		instanceDiff.Identity = s.Identity // if we create a new diff, we need to copy the identity
 	}
 
 	// Make sure the old value is set in each of the instance diffs.
@@ -1057,7 +912,7 @@ func (r *Resource) SimpleDiff(
 
 // Validate validates the resource configuration against the schema.
 func (r *Resource) Validate(c *terraform.ResourceConfig) diag.Diagnostics {
-	diags := schemaMap(r.SchemaMap()).Validate(c)
+	diags := schemaMap(r.Schema).Validate(c)
 
 	if r.DeprecationMessage != "" {
 		diags = append(diags, diag.Diagnostic{
@@ -1079,7 +934,7 @@ func (r *Resource) ReadDataApply(
 ) (*terraform.InstanceState, diag.Diagnostics) {
 	// Data sources are always built completely from scratch
 	// on each read, so the source state is always nil.
-	data, err := schemaMap(r.SchemaMap()).Data(nil, d)
+	data, err := schemaMap(r.Schema).Data(nil, d)
 	if err != nil {
 		return nil, diag.FromErr(err)
 	}
@@ -1120,12 +975,10 @@ func (r *Resource) RefreshWithoutUpgrade(
 		}
 	}
 
-	schema := schemaMapWithIdentity{r.SchemaMap(), r.Identity.SchemaMap()}
-
 	if r.Exists != nil {
 		// Make a copy of data so that if it is modified it doesn't
 		// affect our Read later.
-		data, err := schema.Data(s, nil)
+		data, err := schemaMap(r.Schema).Data(s, nil)
 		if err != nil {
 			return s, diag.FromErr(err)
 		}
@@ -1148,7 +1001,7 @@ func (r *Resource) RefreshWithoutUpgrade(
 		}
 	}
 
-	data, err := schema.Data(s, nil)
+	data, err := schemaMap(r.Schema).Data(s, nil)
 	if err != nil {
 		return s, diag.FromErr(err)
 	}
@@ -1167,7 +1020,7 @@ func (r *Resource) RefreshWithoutUpgrade(
 		state = nil
 	}
 
-	schema.handleDiffSuppressOnRefresh(ctx, s, state)
+	schemaMap(r.Schema).handleDiffSuppressOnRefresh(ctx, s, state)
 	return r.recordCurrentSchemaVersion(state), diags
 }
 
@@ -1213,15 +1066,14 @@ func (r *Resource) InternalValidate(topSchemaMap schemaMap, writable bool) error
 		}
 	}
 
-	schema := schemaMap(r.SchemaMap())
 	tsm := topSchemaMap
 
 	if r.isTopLevel() && writable {
 		// All non-Computed attributes must be ForceNew if Update is not defined
 		if !r.updateFuncSet() {
 			nonForceNewAttrs := make([]string, 0)
-			for k, v := range schema {
-				if !v.ForceNew && !v.Computed && !v.WriteOnly {
+			for k, v := range r.Schema {
+				if !v.ForceNew && !v.Computed {
 					nonForceNewAttrs = append(nonForceNewAttrs, k)
 				}
 			}
@@ -1231,19 +1083,19 @@ func (r *Resource) InternalValidate(topSchemaMap schemaMap, writable bool) error
 			}
 		} else {
 			nonUpdateableAttrs := make([]string, 0)
-			for k, v := range schema {
+			for k, v := range r.Schema {
 				if v.ForceNew || v.Computed && !v.Optional {
 					nonUpdateableAttrs = append(nonUpdateableAttrs, k)
 				}
 			}
-			updateableAttrs := len(schema) - len(nonUpdateableAttrs)
+			updateableAttrs := len(r.Schema) - len(nonUpdateableAttrs)
 			if updateableAttrs == 0 {
 				return fmt.Errorf(
 					"All fields are ForceNew or Computed w/out Optional, Update is superfluous")
 			}
 		}
 
-		tsm = schema
+		tsm = schemaMap(r.Schema)
 
 		// Destroy, and Read are required
 		if !r.readFuncSet() {
@@ -1302,16 +1154,12 @@ func (r *Resource) InternalValidate(topSchemaMap schemaMap, writable bool) error
 
 	// Data source
 	if r.isTopLevel() && !writable {
-		tsm = schema
+		tsm = schemaMap(r.Schema)
 		for k := range tsm {
 			if isReservedDataSourceFieldName(k) {
 				return fmt.Errorf("%s is a reserved field name", k)
 			}
 		}
-	}
-
-	if r.SchemaFunc != nil && r.Schema != nil {
-		return fmt.Errorf("SchemaFunc and Schema should not both be set")
 	}
 
 	// check context funcs are not set alongside their nonctx counterparts
@@ -1356,7 +1204,7 @@ func (r *Resource) InternalValidate(topSchemaMap schemaMap, writable bool) error
 		return fmt.Errorf("Delete and DeleteWithoutTimeout should not both be set")
 	}
 
-	return schema.InternalValidate(tsm)
+	return schemaMap(r.Schema).InternalValidate(tsm)
 }
 
 func isReservedDataSourceFieldName(name string) bool {
@@ -1403,7 +1251,7 @@ func isReservedResourceFieldName(name string) bool {
 //
 // This function is useful for unit tests and ResourceImporter functions.
 func (r *Resource) Data(s *terraform.InstanceState) *ResourceData {
-	result, err := schemaMapWithIdentity{r.SchemaMap(), r.Identity.SchemaMap()}.Data(s, nil)
+	result, err := schemaMap(r.Schema).Data(s, nil)
 	if err != nil {
 		// At the time of writing, this isn't possible (Data never returns
 		// non-nil errors). We panic to find this in the future if we have to.
@@ -1430,8 +1278,7 @@ func (r *Resource) Data(s *terraform.InstanceState) *ResourceData {
 // TODO: May be able to be removed with the above ResourceData function.
 func (r *Resource) TestResourceData() *ResourceData {
 	return &ResourceData{
-		schema:         r.SchemaMap(),
-		identitySchema: r.Identity.SchemaMap(),
+		schema: r.Schema,
 	}
 }
 
@@ -1469,137 +1316,5 @@ func NoopContext(context.Context, *ResourceData, interface{}) diag.Diagnostics {
 // and returns no error.
 func RemoveFromState(d *ResourceData, _ interface{}) error {
 	d.SetId("")
-	return nil
-}
-
-// Internal validation of provider implementation
-func (r *ResourceIdentity) InternalIdentityValidate() error {
-	if r == nil {
-		return fmt.Errorf(`The resource identity is empty`)
-	}
-
-	if len(r.SchemaMap()) == 0 {
-		return fmt.Errorf(`The resource identity schema is empty`)
-	}
-
-	for k, v := range r.SchemaMap() {
-		if !v.OptionalForImport && !v.RequiredForImport {
-			return fmt.Errorf(`OptionalForImport or RequiredForImport must be set for resource identity`)
-		}
-		if v.OptionalForImport && v.RequiredForImport {
-			return fmt.Errorf(`OptionalForImport or RequiredForImport must be set for resource identity, not both`)
-		}
-
-		if v.Type == TypeMap {
-			return fmt.Errorf(`TypeMap is not valid for resource identity`)
-		}
-		if v.Type == TypeSet {
-			return fmt.Errorf(`TypeSet is not valid for resource identity`)
-		}
-		if v.Type == typeObject {
-			return fmt.Errorf(`TypeObject is not valid for resource identity`)
-		}
-		if v.Type == TypeInvalid {
-			return fmt.Errorf(`TypeInvalid is not valid for resource identity`)
-		}
-
-		if v.Type == TypeList {
-			if v.Elem != nil {
-				if v.Elem == TypeMap {
-					return fmt.Errorf(`TypeMap is not valid for resource identity element type`)
-				}
-				if v.Elem == TypeSet {
-					return fmt.Errorf(`TypeSet is not valid for resource identity element type`)
-				}
-				if v.Elem == typeObject {
-					return fmt.Errorf(`TypeObject is not valid for resource identity element type`)
-				}
-				if v.Elem == TypeInvalid {
-					return fmt.Errorf(`TypeInvalid is not valid for resource identity element type`)
-				}
-			}
-		}
-
-		if v.ForceNew {
-			return fmt.Errorf(`ForceNew is not used in resource identity`)
-		}
-		if v.Required {
-			return fmt.Errorf(`Required is not used in resource identity`)
-		}
-		if v.Optional {
-			return fmt.Errorf(`Optional is not used in resource identity`)
-		}
-		if v.WriteOnly {
-			return fmt.Errorf(`WriteOnly is not used in resource identity`)
-		}
-		if v.Computed {
-			return fmt.Errorf(`Computed is not used in resource identity`)
-		}
-		if v.Sensitive {
-			return fmt.Errorf(`Sensitive is not used in resource identity`)
-		}
-		if v.DiffSuppressOnRefresh {
-			return fmt.Errorf(`DiffSuppressOnRefresh is not used in resource identity`)
-		}
-		if v.Deprecated != "" {
-			return fmt.Errorf(`Deprecated is not used in resource identity`)
-		}
-		if len(v.RequiredWith) > 0 {
-			return fmt.Errorf(`RequiredWith is not used in resource identity`)
-		}
-		if len(v.ComputedWhen) > 0 {
-			return fmt.Errorf(`ComputedWhen is not used in resource identity`)
-		}
-		if len(v.AtLeastOneOf) > 0 {
-			return fmt.Errorf("%s: AtLeastOneOf is for configurable attributes,"+
-				"there's nothing to configure for resource identity", k)
-		}
-		if len(v.ConflictsWith) > 0 {
-			return fmt.Errorf("%s: ConflictsWith is for configurable attributes,"+
-				"there's nothing to configure for resource identity", k)
-		}
-		if v.Default != nil {
-			return fmt.Errorf("%s: Default is for configurable attributes,"+
-				"there's nothing to configure for resource identity", k)
-		}
-		if v.DefaultFunc != nil {
-			return fmt.Errorf("%s: DefaultFunc is for configurable attributes,"+
-				"there's nothing to configure for resource identity", k)
-		}
-		if v.DiffSuppressFunc != nil {
-			return fmt.Errorf("%s: DiffSuppressFunc is for suppressing differences"+
-				" between config and state representation. "+
-				"There is no config for resource identity, nothing to compare.", k)
-		}
-		if len(v.ExactlyOneOf) > 0 {
-			return fmt.Errorf("%s: ExactlyOneOf is for configurable attributes,"+
-				"there's nothing to configure for resource identity", k)
-		}
-		if v.InputDefault != "" {
-			return fmt.Errorf("%s: InputDefault is for configurable attributes,"+
-				"there's nothing to configure for resource identity", k)
-		}
-		if v.MaxItems > 0 {
-			return fmt.Errorf("%s: MaxItems is for configurable attributes,"+
-				"there's nothing to configure for resource identity", k)
-		}
-		if v.MinItems > 0 {
-			return fmt.Errorf("%s: MinItems is for configurable attributes,"+
-				"there's nothing to configure for resource identity", k)
-		}
-		if v.StateFunc != nil {
-			return fmt.Errorf("%s: StateFunc is extraneous, "+
-				"value should just be changed before setting for resource identity", k)
-		}
-		if v.ValidateFunc != nil {
-			return fmt.Errorf("%s: ValidateFunc is for validating user input, "+
-				"there's nothing to validate for resource identity", k)
-		}
-		if v.ValidateDiagFunc != nil {
-			return fmt.Errorf("%s: ValidateDiagFunc is for validating user input, "+
-				"there's nothing to validate for resource identity", k)
-		}
-	}
-
 	return nil
 }

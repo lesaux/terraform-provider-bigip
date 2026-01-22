@@ -27,18 +27,6 @@ import (
 	"errors"
 )
 
-// stopWalkError is a well-known error for immediately stopping walk() without
-// returning an actual error.
-//
-// The implementation of walk() will continue walking all attributes/elements
-// within an object/collection since the boolean return value of the callback
-// function is only intended to signal whether to stop descending into the same
-// Value. Changing that behavior would be considered a breaking change.
-//
-// This could be considered for exporting to give external consumers better
-// performance.
-var stopWalkError = errors.New("walk stop requested")
-
 // Walk traverses a Value, calling the passed function for every element and
 // attribute in the Value. The AttributePath passed to the callback function
 // will identify which attribute or element is currently being surfaced by the
@@ -50,116 +38,65 @@ var stopWalkError = errors.New("walk stop requested")
 // not matter when the Value that has been surfaced has no elements or
 // attributes. Walk uses a depth-first traversal.
 func Walk(val Value, cb func(*AttributePath, Value) (bool, error)) error {
-	_, err := walk(NewAttributePath(), val, cb)
-
-	return err
+	return walk(nil, val, cb)
 }
 
-// walk is the internal implementation of Walk(). It includes a bool return for
-// whether callers should continue walking any remaining Value.
-func walk(path *AttributePath, val Value, cb func(*AttributePath, Value) (bool, error)) (bool, error) {
+func walk(path *AttributePath, val Value, cb func(*AttributePath, Value) (bool, error)) error {
 	shouldContinue, err := cb(path, val)
-
-	if errors.Is(err, stopWalkError) {
-		return false, nil
-	}
-
 	if err != nil {
-		return false, path.NewError(err)
+		return path.NewError(err)
 	}
-
 	if !shouldContinue {
-		// The callback bool return is intended to signal that this Value should
-		// no longer be descended. Changing this behavior is a breaking change.
-		// A stopWalkError can be used to signal that all remaining Value can be
-		// skipped.
-		return true, nil
+		return nil
 	}
 
 	if val.IsNull() || !val.IsKnown() {
-		return true, nil
+		return nil
 	}
 
-	switch val.Type().(type) {
-	case List, Tuple:
-		v, ok := val.value.([]Value)
-
-		if !ok {
-			return false, path.NewErrorf("cannot convert %T into []tftypes.Value", val.value)
+	ty := val.Type()
+	switch {
+	case ty.Is(List{}), ty.Is(Set{}), ty.Is(Tuple{}):
+		var v []Value
+		err := val.As(&v)
+		if err != nil {
+			// should never happen
+			return path.NewError(err)
 		}
-
 		for pos, el := range v {
-			elementPath := path.WithElementKeyInt(pos)
-			shouldContinue, err := walk(elementPath, el, cb)
-
+			if ty.Is(Set{}) {
+				path = path.WithElementKeyValue(el)
+			} else {
+				path = path.WithElementKeyInt(pos)
+			}
+			err = walk(path, el, cb)
 			if err != nil {
-				return false, elementPath.NewError(err)
+				return path.NewError(err)
 			}
-
-			if !shouldContinue {
-				return false, nil
-			}
+			path = path.WithoutLastStep()
 		}
-	case Map:
-		v, ok := val.value.(map[string]Value)
-
-		if !ok {
-			return false, path.NewErrorf("cannot convert %T into map[string]tftypes.Value", val.value)
+	case ty.Is(Map{}), ty.Is(Object{}):
+		v := map[string]Value{}
+		err := val.As(&v)
+		if err != nil {
+			// should never happen
+			return err
 		}
-
 		for k, el := range v {
-			elementPath := path.WithElementKeyString(k)
-			shouldContinue, err := walk(elementPath, el, cb)
-
+			if ty.Is(Map{}) {
+				path = path.WithElementKeyString(k)
+			} else if ty.Is(Object{}) {
+				path = path.WithAttributeName(k)
+			}
+			err = walk(path, el, cb)
 			if err != nil {
-				return false, elementPath.NewError(err)
+				return path.NewError(err)
 			}
-
-			if !shouldContinue {
-				return false, nil
-			}
-		}
-	case Object:
-		v, ok := val.value.(map[string]Value)
-
-		if !ok {
-			return false, path.NewErrorf("cannot convert %T into map[string]tftypes.Value", val.value)
-		}
-
-		for k, el := range v {
-			attributePath := path.WithAttributeName(k)
-			shouldContinue, err := walk(attributePath, el, cb)
-
-			if err != nil {
-				return false, attributePath.NewError(err)
-			}
-
-			if !shouldContinue {
-				return false, nil
-			}
-		}
-	case Set:
-		v, ok := val.value.([]Value)
-
-		if !ok {
-			return false, path.NewErrorf("cannot convert %T into []tftypes.Value", val.value)
-		}
-
-		for _, el := range v {
-			elementPath := path.WithElementKeyValue(el)
-			shouldContinue, err := walk(elementPath, el, cb)
-
-			if err != nil {
-				return false, elementPath.NewError(err)
-			}
-
-			if !shouldContinue {
-				return false, nil
-			}
+			path = path.WithoutLastStep()
 		}
 	}
 
-	return true, nil
+	return nil
 }
 
 // Transform uses a callback to mutate a Value. Each element or attribute will
@@ -176,174 +113,85 @@ func Transform(val Value, cb func(*AttributePath, Value) (Value, error)) (Value,
 }
 
 func transform(path *AttributePath, val Value, cb func(*AttributePath, Value) (Value, error)) (Value, error) {
-	switch val.Type().(type) {
-	case nil:
+	var newVal Value
+	ty := val.Type()
+
+	if ty == nil {
 		return val, path.NewError(errors.New("invalid transform: value missing type"))
 	}
 
-	newVal, err := transformUnderlying(path, val, cb)
-
-	if err != nil {
-		return val, err
+	switch {
+	case val.IsNull() || !val.IsKnown():
+		newVal = val
+	case ty.Is(List{}), ty.Is(Set{}), ty.Is(Tuple{}):
+		var v []Value
+		err := val.As(&v)
+		if err != nil {
+			return val, err
+		}
+		if len(v) == 0 {
+			newVal = val
+		} else {
+			elems := make([]Value, 0, len(v))
+			for pos, el := range v {
+				if ty.Is(Set{}) {
+					path = path.WithElementKeyValue(el)
+				} else {
+					path = path.WithElementKeyInt(pos)
+				}
+				newEl, err := transform(path, el, cb)
+				if err != nil {
+					return val, path.NewError(err)
+				}
+				elems = append(elems, newEl)
+				path = path.WithoutLastStep()
+			}
+			newVal, err = newValue(ty, elems)
+			if err != nil {
+				return val, path.NewError(err)
+			}
+		}
+	case ty.Is(Map{}), ty.Is(Object{}):
+		v := map[string]Value{}
+		err := val.As(&v)
+		if err != nil {
+			return val, err
+		}
+		if len(v) == 0 {
+			newVal = val
+		} else {
+			elems := map[string]Value{}
+			for k, el := range v {
+				if ty.Is(Map{}) {
+					path = path.WithElementKeyString(k)
+				} else {
+					path = path.WithAttributeName(k)
+				}
+				newEl, err := transform(path, el, cb)
+				if err != nil {
+					return val, path.NewError(err)
+				}
+				elems[k] = newEl
+				path = path.WithoutLastStep()
+			}
+			newVal, err = newValue(ty, elems)
+			if err != nil {
+				return val, path.NewError(err)
+			}
+		}
+	default:
+		newVal = val
 	}
-
 	res, err := cb(path, newVal)
-
 	if err != nil {
 		return res, path.NewError(err)
 	}
-
 	newTy := newVal.Type()
-
 	if newTy == nil {
 		return val, path.NewError(errors.New("invalid transform: new value missing type"))
 	}
-
-	if !newTy.UsableAs(val.Type()) {
+	if !newTy.UsableAs(ty) {
 		return val, path.NewError(errors.New("invalid transform: value changed type"))
 	}
-
 	return res, err
-}
-
-// transformUnderlying returns the Value with any underlying attribute or
-// element transformations completed.
-func transformUnderlying(path *AttributePath, val Value, cb func(*AttributePath, Value) (Value, error)) (Value, error) {
-	// If the Value is null or unknown, there is nothing to descend.
-	if val.IsNull() || !val.IsKnown() {
-		return val, nil
-	}
-
-	switch val.Type().(type) {
-	case List, Tuple:
-		elements, ok := val.value.([]Value)
-
-		if !ok {
-			return val, path.NewErrorf("cannot convert %T into []tftypes.Value", val.value)
-		}
-
-		if len(elements) == 0 {
-			return val, nil
-		}
-
-		newElements := make([]Value, 0, len(elements))
-
-		for index, element := range elements {
-			elementPath := path.WithElementKeyInt(index)
-
-			newElement, err := transform(elementPath, element, cb)
-
-			if err != nil {
-				return val, elementPath.NewError(err)
-			}
-
-			newElements = append(newElements, newElement)
-		}
-
-		newVal, err := newValue(val.Type(), newElements)
-
-		if err != nil {
-			return val, path.NewError(err)
-		}
-
-		return newVal, nil
-	case Map:
-		elements, ok := val.value.(map[string]Value)
-
-		if !ok {
-			return val, path.NewErrorf("cannot convert %T into map[string]tftypes.Value", val.value)
-		}
-
-		if len(elements) == 0 {
-			return val, nil
-		}
-
-		newElements := make(map[string]Value, len(elements))
-
-		for key, element := range elements {
-			elementPath := path.WithElementKeyString(key)
-
-			newElement, err := transform(elementPath, element, cb)
-
-			if err != nil {
-				return val, elementPath.NewError(err)
-			}
-
-			newElements[key] = newElement
-		}
-
-		newVal, err := newValue(val.Type(), newElements)
-
-		if err != nil {
-			return val, path.NewError(err)
-		}
-
-		return newVal, nil
-	case Object:
-		attributes, ok := val.value.(map[string]Value)
-
-		if !ok {
-			return val, path.NewErrorf("cannot convert %T into map[string]tftypes.Value", val.value)
-		}
-
-		if len(attributes) == 0 {
-			return val, nil
-		}
-
-		newAttributes := make(map[string]Value, len(attributes))
-
-		for name, attribute := range attributes {
-			attributePath := path.WithAttributeName(name)
-
-			newAttribute, err := transform(attributePath, attribute, cb)
-
-			if err != nil {
-				return val, attributePath.NewError(err)
-			}
-
-			newAttributes[name] = newAttribute
-		}
-
-		newVal, err := newValue(val.Type(), newAttributes)
-
-		if err != nil {
-			return val, path.NewError(err)
-		}
-
-		return newVal, nil
-	case Set:
-		elements, ok := val.value.([]Value)
-
-		if !ok {
-			return val, path.NewErrorf("cannot convert %T into []tftypes.Value", val.value)
-		}
-
-		if len(elements) == 0 {
-			return val, nil
-		}
-
-		newElements := make([]Value, 0, len(elements))
-
-		for _, element := range elements {
-			elementPath := path.WithElementKeyValue(element)
-
-			newElement, err := transform(elementPath, element, cb)
-
-			if err != nil {
-				return val, elementPath.NewError(err)
-			}
-
-			newElements = append(newElements, newElement)
-		}
-
-		newVal, err := newValue(val.Type(), newElements)
-
-		if err != nil {
-			return val, path.NewError(err)
-		}
-
-		return newVal, nil
-	}
-
-	return val, nil
 }

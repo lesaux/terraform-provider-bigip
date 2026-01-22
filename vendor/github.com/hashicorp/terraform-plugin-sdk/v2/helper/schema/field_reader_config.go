@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package schema
 
 import (
@@ -269,7 +266,7 @@ func (r *ConfigFieldReader) readSet(
 		return FieldReadResult{Value: set}, nil
 	}
 
-	// If the list is computed, the set is necessarily computed
+	// If the list is computed, the set is necessarilly computed
 	if raw.Computed {
 		return FieldReadResult{
 			Value:    set,
@@ -303,7 +300,7 @@ func (r *ConfigFieldReader) hasComputedSubKeys(key string, schema *Schema) bool 
 
 	switch t := schema.Elem.(type) {
 	case *Resource:
-		for k, schema := range t.SchemaMap() {
+		for k, schema := range t.Schema {
 			if r.Config.IsComputed(prefix + k) {
 				return true
 			}

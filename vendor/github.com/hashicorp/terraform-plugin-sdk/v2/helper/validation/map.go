@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package validation
 
 import (
@@ -9,24 +6,23 @@ import (
 	"sort"
 
 	"github.com/hashicorp/go-cty/cty"
-
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
 // MapKeyLenBetween returns a SchemaValidateDiagFunc which tests if the provided value
-// is of type map and the length of all keys are between minVal and maxVal (inclusive)
-func MapKeyLenBetween(minVal, maxVal int) schema.SchemaValidateDiagFunc {
+// is of type map and the length of all keys are between min and max (inclusive)
+func MapKeyLenBetween(min, max int) schema.SchemaValidateDiagFunc {
 	return func(v interface{}, path cty.Path) diag.Diagnostics {
 		var diags diag.Diagnostics
 
 		for _, key := range sortedKeys(v.(map[string]interface{})) {
 			keyLen := len(key)
-			if keyLen < minVal || keyLen > maxVal {
+			if keyLen < min || keyLen > max {
 				diags = append(diags, diag.Diagnostic{
 					Severity:      diag.Error,
 					Summary:       "Bad map key length",
-					Detail:        fmt.Sprintf("Map key lengths should be in the range (%d - %d): %s (length = %d)", minVal, maxVal, key, keyLen),
+					Detail:        fmt.Sprintf("Map key lengths should be in the range (%d - %d): %s (length = %d)", min, max, key, keyLen),
 					AttributePath: append(path, cty.IndexStep{Key: cty.StringVal(key)}),
 				})
 			}
@@ -37,8 +33,8 @@ func MapKeyLenBetween(minVal, maxVal int) schema.SchemaValidateDiagFunc {
 }
 
 // MapValueLenBetween returns a SchemaValidateDiagFunc which tests if the provided value
-// is of type map and the length of all values are between minVal and maxVal (inclusive)
-func MapValueLenBetween(minVal, maxVal int) schema.SchemaValidateDiagFunc {
+// is of type map and the length of all values are between min and max (inclusive)
+func MapValueLenBetween(min, max int) schema.SchemaValidateDiagFunc {
 	return func(v interface{}, path cty.Path) diag.Diagnostics {
 		var diags diag.Diagnostics
 
@@ -58,11 +54,11 @@ func MapValueLenBetween(minVal, maxVal int) schema.SchemaValidateDiagFunc {
 			}
 
 			valLen := len(val.(string))
-			if valLen < minVal || valLen > maxVal {
+			if valLen < min || valLen > max {
 				diags = append(diags, diag.Diagnostic{
 					Severity:      diag.Error,
 					Summary:       "Bad map value length",
-					Detail:        fmt.Sprintf("Map value lengths should be in the range (%d - %d): %s => %v (length = %d)", minVal, maxVal, key, val, valLen),
+					Detail:        fmt.Sprintf("Map value lengths should be in the range (%d - %d): %s => %v (length = %d)", min, max, key, val, valLen),
 					AttributePath: append(path, cty.IndexStep{Key: cty.StringVal(key)}),
 				})
 			}
