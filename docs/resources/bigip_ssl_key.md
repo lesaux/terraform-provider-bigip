@@ -14,25 +14,41 @@ Certificate key can be imported from certificate key files on the local disk, in
 
 ## Example Usage
 
+### Basic Usage with File
 
 ```hcl
-
 resource "bigip_ssl_key" "test-key" {
   name      = "serverkey.key"
   content   = file("serverkey.key")
   partition = "Common"
 }
+```
 
-```      
+### Usage with Ephemeral Resources (Write-Only)
+
+Using `ephemeral` resources ensures that the private key is never stored in the Terraform state file or on disk.
+
+```hcl
+ephemeral "tls_private_key" "example" {
+  algorithm = "RSA"
+}
+
+resource "bigip_ssl_key" "example" {
+  name               = "example.key"
+  content_wo         = ephemeral.tls_private_key.example.private_key_pem
+  content_wo_version = 1
+  partition          = "Common"
+}
+```
 
 ## Argument Reference
 
 
 * `name`- (Required,type `string`) Name of the SSL Certificate key to be Imported on to BIGIP
 
-* `content` - (Optional) Content of certificate key on Local Disk,path of SSL certificate key will be provided to terraform `file` function 
+* `content` - (Optional) Content of the SSL certificate key. Typically used with the `file` function to read from a file on the local disk.
 
-* `content_wo` - (Optional) Content of certificate key on Local Disk,path of SSL certificate key will be provided to terraform `file` function. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `content` is useful when the key content is sensitive and should not be persisted in the state.
+* `content_wo` - (Optional) Content of the SSL certificate key. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `content` is useful when using ephemeral resources to ensure sensitive data is not persisted.
 
 * `content_wo_version` - (Optional) This attribute is used to trigger an update when `content_wo` changes. If the content of the key changes, you must increment this version number to force Terraform to update the resource.
 
