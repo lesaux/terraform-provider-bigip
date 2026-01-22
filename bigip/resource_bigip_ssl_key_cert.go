@@ -258,9 +258,13 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 		certPath = d.Get("cert_content_wo").(string)
 	}
 
-	sourcePath, err := client.UploadKey(keyName, keyPath)
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("error while trying to upload ssl key (%s): %s", keyName, err))
+	var sourcePath string
+	var err error
+	if keyPath != "" {
+		sourcePath, err = client.UploadKey(keyName, keyPath)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error while trying to upload ssl key (%s): %s", keyName, err))
+		}
 	}
 
 	keyCfg := bigip.Key{
@@ -300,9 +304,11 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 		cert.CertValidatorRef = certValidRef
 	}
 
-	err = client.UpdateCertificate(certPath, cert)
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("error while updating the ssl certificate (%s): %s", certName, err))
+	if certPath != "" {
+		err = client.UpdateCertificate(certPath, cert)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error while updating the ssl certificate (%s): %s", certName, err))
+		}
 	}
 	err = client.CommitTransaction(t.TransID)
 	if err != nil {
