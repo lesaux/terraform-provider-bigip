@@ -300,8 +300,8 @@ func TestAccBigipSSLCertKeyCreateWOSuppressDiff(t *testing.T) {
 			{
 				// This step attempts to change content but without version change
 				// Terraform should see NO changes because of DiffSuppressFunc
-				Config: testResourceSSLKeyCertWOUpdateNoVersion, 
-				PlanOnly: true,
+				Config:             testResourceSSLKeyCertWOUpdateNoVersion,
+				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
 		},

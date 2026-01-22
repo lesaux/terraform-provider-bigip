@@ -153,6 +153,7 @@ resource "bigip_ssl_key" "test-key-wo" {
         partition = "` + TestPartition + `"
 }
 `
+
 // Test update with NO version change - should NOT update
 var TestSslKeyResourceWriteOnlyNoVersionUpdate = `
 ephemeral "tls_private_key" "wo" {
@@ -217,8 +218,8 @@ func TestAccBigipSslKeyWriteOnlySuppressDiff(t *testing.T) {
 			{
 				// This step attempts to change content but without version change
 				// Terraform should see NO changes because of DiffSuppressFunc
-				Config: TestSslKeyResourceWriteOnlyNoVersionUpdate, 
-				PlanOnly: true,
+				Config:             TestSslKeyResourceWriteOnlyNoVersionUpdate,
+				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
 		},
@@ -244,7 +245,7 @@ func TestAccBigipSslKeyWriteOnlyConflict(t *testing.T) {
 		PreCheck: func() {
 			testAcctPreCheck(t)
 		},
-		Providers:    testAccProviders,
+		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{
 				Config:      TestSslKeyResourceWriteOnlyConflict,
