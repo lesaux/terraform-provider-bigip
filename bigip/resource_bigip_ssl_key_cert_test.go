@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -143,6 +144,137 @@ func TestAccBigipSSLCertKeyCreateCertKeyProfileOCSP(t *testing.T) {
 					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert", "issuer_cert", "/Common/MyCA"),
 					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert", "cert_ocsp", "/Common/testocsp1"),
 				),
+			},
+		},
+	})
+}
+
+var testResourceSSLKeyCertWO = `
+resource "bigip_ssl_key_cert" "testkeycert_wo" {
+  partition          = "Common"
+  key_name           = "ssl-test-key-wo"
+  key_content_wo     = "${file("` + folder + `/../examples/serverkey.key")}"
+  key_content_wo_version = 1
+  cert_name          = "ssl-test-cert-wo"
+  cert_content_wo    = "${file("` + folder + `/../examples/servercert.crt")}"
+  cert_content_wo_version = 1
+}
+`
+
+var testResourceSSLKeyCertWOUpdated = `
+resource "bigip_ssl_key_cert" "testkeycert_wo" {
+  partition          = "Common"
+  key_name           = "ssl-test-key-wo"
+  key_content_wo     = "${file("` + folder + `/../examples/serverkey2.key")}"
+  key_content_wo_version = 2
+  cert_name          = "ssl-test-cert-wo"
+  cert_content_wo    = "${file("` + folder + `/../examples/servercert2.crt")}"
+  cert_content_wo_version = 2
+}
+`
+
+var testResourceSSLKeyCertWOUpdateNoVersion = `
+resource "bigip_ssl_key_cert" "testkeycert_wo" {
+  partition          = "Common"
+  key_name           = "ssl-test-key-wo"
+  key_content_wo     = "${file("` + folder + `/../examples/serverkey2.key")}"
+  key_content_wo_version = 1
+  cert_name          = "ssl-test-cert-wo"
+  cert_content_wo    = "${file("` + folder + `/../examples/servercert2.crt")}"
+  cert_content_wo_version = 1
+}
+`
+
+func TestAccBigipSSLCertKeyCreateWO(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				Config: testResourceSSLKeyCertWO,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "key_name", "ssl-test-key-wo"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "cert_name", "ssl-test-cert-wo"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "key_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "cert_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "partition", "Common"),
+				),
+				Destroy: false,
+			},
+			{
+				// Test idempotency
+				Config: testResourceSSLKeyCertWO,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "key_name", "ssl-test-key-wo"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "cert_name", "ssl-test-cert-wo"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				// Test Update
+				Config: testResourceSSLKeyCertWOUpdated,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "key_content_wo_version", "2"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "cert_content_wo_version", "2"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccBigipSSLCertKeyCreateWOSuppressDiff(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				Config: testResourceSSLKeyCertWO,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "key_name", "ssl-test-key-wo"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "cert_name", "ssl-test-cert-wo"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "key_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_wo", "cert_content_wo_version", "1"),
+				),
+			},
+			{
+				// This step attempts to change content but without version change
+				// Terraform should see NO changes because of DiffSuppressFunc
+				Config: testResourceSSLKeyCertWOUpdateNoVersion, 
+				PlanOnly: true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+var testResourceSSLKeyCertWOConflict = `
+resource "bigip_ssl_key_cert" "testkeycert_wo_conflict" {
+  partition          = "Common"
+  key_name           = "ssl-test-key-wo-conflict"
+  key_content        = "${file("` + folder + `/../examples/serverkey.key")}"
+  key_content_wo     = "${file("` + folder + `/../examples/serverkey.key")}"
+  key_content_wo_version = 1
+  cert_name          = "ssl-test-cert-wo-conflict"
+  cert_content       = "${file("` + folder + `/../examples/servercert.crt")}"
+  cert_content_wo    = "${file("` + folder + `/../examples/servercert.crt")}"
+  cert_content_wo_version = 1
+}
+`
+
+func TestAccBigipSSLCertKeyCreateWOConflict(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				Config:      testResourceSSLKeyCertWOConflict,
+				ExpectError: regexp.MustCompile("conflicts with"),
 			},
 		},
 	})

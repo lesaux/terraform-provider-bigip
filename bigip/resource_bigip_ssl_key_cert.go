@@ -29,10 +29,27 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				Description: "The name of the key.",
 			},
 			"key_content": {
-				Type:        schema.TypeString,
-				Required:    true,
-				Sensitive:   true,
-				Description: "The content of the key.",
+				Type:          schema.TypeString,
+				Optional:      true,
+				Sensitive:     true,
+				Description:   "The content of the key.",
+				ConflictsWith: []string{"key_content_wo"},
+			},
+			"key_content_wo": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Sensitive:     true,
+				Description:   "The content of the key - Write Only",
+				ConflictsWith: []string{"key_content"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("key_content_wo_version")
+				},
+			},
+			"key_content_wo_version": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Default:     0,
+				Description: "Version of the content of the key - Write Only",
 			},
 			"key_full_path": {
 				Type:        schema.TypeString,
@@ -47,10 +64,27 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				ForceNew:    true,
 			},
 			"cert_content": {
-				Type:        schema.TypeString,
-				Required:    true,
-				Sensitive:   true,
-				Description: "The content of the cert.",
+				Type:          schema.TypeString,
+				Optional:      true,
+				Sensitive:     true,
+				Description:   "The content of the cert.",
+				ConflictsWith: []string{"cert_content_wo"},
+			},
+			"cert_content_wo": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Sensitive:     true,
+				Description:   "The content of the cert - Write Only",
+				ConflictsWith: []string{"cert_content"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("cert_content_wo_version")
+				},
+			},
+			"cert_content_wo_version": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Default:     0,
+				Description: "Version of the content of the cert - Write Only",
 			},
 			"cert_full_path": {
 				Type:        schema.TypeString,
@@ -95,10 +129,16 @@ func resourceBigipSSLKeyCertCreate(ctx context.Context, d *schema.ResourceData, 
 
 	keyName := d.Get("key_name").(string)
 	keyPath := d.Get("key_content").(string)
+	if keyPath == "" {
+		keyPath = d.Get("key_content_wo").(string)
+	}
 	partition := d.Get("partition").(string)
 	passphrase := d.Get("passphrase").(string)
 	certName := d.Get("cert_name").(string)
 	certPath := d.Get("cert_content").(string)
+	if certPath == "" {
+		certPath = d.Get("cert_content_wo").(string)
+	}
 
 	sourcePath, err := client.UploadKey(keyName, keyPath)
 	if err != nil {
@@ -201,10 +241,16 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 
 	keyName := d.Get("key_name").(string)
 	keyPath := d.Get("key_content").(string)
+	if keyPath == "" {
+		keyPath = d.Get("key_content_wo").(string)
+	}
 	partition := d.Get("partition").(string)
 	passphrase := d.Get("passphrase").(string)
 	certName := d.Get("cert_name").(string)
 	certPath := d.Get("cert_content").(string)
+	if certPath == "" {
+		certPath = d.Get("cert_content_wo").(string)
+	}
 
 	sourcePath, err := client.UploadKey(keyName, keyPath)
 	if err != nil {

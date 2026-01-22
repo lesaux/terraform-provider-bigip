@@ -9,6 +9,7 @@ package bigip
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	bigip "github.com/f5devcentral/go-bigip"
@@ -122,4 +123,118 @@ func testChecksslKeyDestroyed(s *terraform.State) error {
 		}
 	}
 	return nil
+}
+
+var folder1_wo, _ = os.Getwd()
+var SslkeyName_wo = "serverkey_wo.key"
+var TestSslkeyName_wo = fmt.Sprintf("/%s/%s", TestPartition, SslkeyName_wo)
+
+var TestSslKeyResourceWriteOnly = `
+resource "bigip_ssl_key" "test-key-wo" {
+        name = "` + SslkeyName_wo + `"
+        content_wo = "${file("` + folder1_wo + `/../examples/serverkey.key")}"
+		content_wo_version : 1
+        partition = "` + TestPartition + `"
+}
+`
+
+var TestSslKeyResourceWriteOnlyUpdated = `
+resource "bigip_ssl_key" "test-key-wo" {
+        name = "` + SslkeyName_wo + `"
+        content_wo = "${file("` + folder1_wo + `/../examples/serverkey2.key")}"
+		content_wo_version : 2
+        partition = "` + TestPartition + `"
+}
+`
+// Test update with NO version change - should NOT update
+var TestSslKeyResourceWriteOnlyNoVersionUpdate = `
+resource "bigip_ssl_key" "test-key-wo" {
+        name = "` + SslkeyName_wo + `"
+        content_wo = "${file("` + folder1_wo + `/../examples/serverkey2.key")}"
+		content_wo_version : 1
+        partition = "` + TestPartition + `"
+}
+`
+
+func TestAccBigipSslKeyWriteOnly(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers:    testAccProviders,
+		CheckDestroy: testChecksslKeyDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: TestSslKeyResourceWriteOnly,
+				Check: resource.ComposeTestCheckFunc(
+					testChecksslkeyExists(TestSslkeyName_wo, true),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "name", SslkeyName_wo),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "partition", TestPartition),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "content_wo_version", "1"),
+				),
+			},
+			{
+				Config: TestSslKeyResourceWriteOnlyUpdated,
+				Check: resource.ComposeTestCheckFunc(
+					testChecksslkeyExists(TestSslkeyName_wo, true),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "name", SslkeyName_wo),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "partition", TestPartition),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "content_wo_version", "2"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccBigipSslKeyWriteOnlySuppressDiff(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers:    testAccProviders,
+		CheckDestroy: testChecksslKeyDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: TestSslKeyResourceWriteOnly,
+				Check: resource.ComposeTestCheckFunc(
+					testChecksslkeyExists(TestSslkeyName_wo, true),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "name", SslkeyName_wo),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "partition", TestPartition),
+					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-wo", "content_wo_version", "1"),
+				),
+			},
+			{
+				// This step attempts to change content but without version change
+				// Terraform should see NO changes because of DiffSuppressFunc
+				Config: TestSslKeyResourceWriteOnlyNoVersionUpdate, 
+				PlanOnly: true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+var TestSslKeyResourceWriteOnlyConflict = `
+resource "bigip_ssl_key" "test-key-wo-conflict" {
+        name = "serverkey_wo_conflict.key"
+        content = "${file("` + folder1_wo + `/../examples/serverkey.key")}"
+        content_wo = "${file("` + folder1_wo + `/../examples/serverkey.key")}"
+		content_wo_version : 1
+        partition = "` + TestPartition + `"
+}
+`
+
+func TestAccBigipSslKeyWriteOnlyConflict(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers:    testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				Config:      TestSslKeyResourceWriteOnlyConflict,
+				ExpectError: regexp.MustCompile("conflicts with content"),
+			},
+		},
+	})
 }

@@ -30,11 +30,27 @@ func resourceBigipSslKey() *schema.Resource {
 				ForceNew:    true,
 			},
 			"content": {
-				Type:      schema.TypeString,
-				Required:  true,
-				Sensitive: true,
-				//ForceNew:    true,
-				Description: "Content of SSL certificate key present on local Disk",
+				Type:          schema.TypeString,
+				Optional:      true,
+				Sensitive:     true,
+				Description:   "Content of SSL certificate key present on local Disk",
+				ConflictsWith: []string{"content_wo"},
+			},
+			"content_wo": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Sensitive:     true,
+				Description:   "Content of SSL certificate key present on local Disk - Write Only",
+				ConflictsWith: []string{"content"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("content_wo_version")
+				},
+			},
+			"content_wo_version": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Default:     0,
+				Description: "Version of Content of SSL certificate key present on local Disk - Write Only",
 			},
 			"passphrase": {
 				Type:        schema.TypeString,
@@ -64,6 +80,9 @@ func resourceBigipSslKeyCreate(ctx context.Context, d *schema.ResourceData, meta
 	name := d.Get("name").(string)
 	log.Println("[INFO] Certificate Key Name " + name)
 	certpath := d.Get("content").(string)
+	if certpath == "" {
+		certpath = d.Get("content_wo").(string)
+	}
 	partition := d.Get("partition").(string)
 	passPhrase := d.Get("passphrase").(string)
 	/*if !strings.HasSuffix(name, ".key") {
@@ -126,6 +145,9 @@ func resourceBigipSslKeyUpdate(ctx context.Context, d *schema.ResourceData, meta
 	name := d.Id()
 	log.Println("[INFO] Certificate key Name " + name)
 	certpath := d.Get("content").(string)
+	if certpath == "" {
+		certpath = d.Get("content_wo").(string)
+	}
 	/*if !strings.HasSuffix(name, ".key") {
 		name = name + ".key"
 	}*/

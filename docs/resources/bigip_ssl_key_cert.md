@@ -32,11 +32,19 @@ resource "bigip_ssl_key_cert" "testkeycert" {
 
 * `key_name`- (Required,type `string`) Name of the SSL key to be Imported on to BIGIP.
 
-* `key_content` - (Required) Content of SSL key on Local Disk,path of SSL key will be provided to terraform `file` function.
+* `key_content` - (Optional) Content of SSL key on Local Disk,path of SSL key will be provided to terraform `file` function.
+
+* `key_content_wo` - (Optional) Content of SSL key on Local Disk,path of SSL key will be provided to terraform `file` function. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `key_content` is useful when the key content is sensitive and should not be persisted in the state.
+
+* `key_content_wo_version` - (Optional) This attribute is used to trigger an update when `key_content_wo` changes. If the content of the key changes, you must increment this version number to force Terraform to update the resource.
 
 * `cert_name`- (Required,type `string`) Name of the SSL certificate to be Imported on to BIGIP.
 
-* `cert_content` - (Required) Content of certificate on Local Disk,path of SSL certificate will be provided to terraform `file` function.
+* `cert_content` - (Optional) Content of certificate on Local Disk,path of SSL certificate will be provided to terraform `file` function.
+
+* `cert_content_wo` - (Optional) Content of certificate on Local Disk,path of SSL certificate will be provided to terraform `file` function. This attribute is write-only and will not be stored in the state file.
+
+* `cert_content_wo_version` - (Optional) This attribute is used to trigger an update when `cert_content_wo` changes. If the content of the certificate changes, you must increment this version number to force Terraform to update the resource.
 
 * `partition` - (Optional,type `string`) Partition on to SSL certificate and key to be imported.
 
