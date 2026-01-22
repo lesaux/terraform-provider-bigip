@@ -34,14 +34,16 @@ func resourceBigipSslKey() *schema.Resource {
 				Optional:      true,
 				Sensitive:     true,
 				Description:   "Content of SSL certificate key present on local Disk",
-				ConflictsWith: []string{"content_wo"},
+				ExactlyOneOf:  []string{"content", "content_wo"},
 			},
 			"content_wo": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Sensitive:     true,
+				WriteOnly:     true,
 				Description:   "Content of SSL certificate key present on local Disk - Write Only",
-				ConflictsWith: []string{"content"},
+				ExactlyOneOf:  []string{"content", "content_wo"},
+				RequiredWith:  []string{"content_wo_version"},
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					return !d.HasChange("content_wo_version")
 				},
@@ -51,6 +53,7 @@ func resourceBigipSslKey() *schema.Resource {
 				Optional:    true,
 				Default:     0,
 				Description: "Version of Content of SSL certificate key present on local Disk - Write Only",
+				RequiredWith: []string{"content_wo"},
 			},
 			"passphrase": {
 				Type:        schema.TypeString,
@@ -145,9 +148,6 @@ func resourceBigipSslKeyUpdate(ctx context.Context, d *schema.ResourceData, meta
 	name := d.Id()
 	log.Println("[INFO] Certificate key Name " + name)
 	certpath := d.Get("content").(string)
-	if certpath == "" {
-		certpath = d.Get("content_wo").(string)
-	}
 	/*if !strings.HasSuffix(name, ".key") {
 		name = name + ".key"
 	}*/

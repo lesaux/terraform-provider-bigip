@@ -33,14 +33,16 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				Optional:      true,
 				Sensitive:     true,
 				Description:   "The content of the key.",
-				ConflictsWith: []string{"key_content_wo"},
+				ExactlyOneOf:  []string{"key_content", "key_content_wo"},
 			},
 			"key_content_wo": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Sensitive:     true,
+				WriteOnly:     true,
 				Description:   "The content of the key - Write Only",
-				ConflictsWith: []string{"key_content"},
+				ExactlyOneOf:  []string{"key_content", "key_content_wo"},
+				RequiredWith:  []string{"key_content_wo_version"},
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					return !d.HasChange("key_content_wo_version")
 				},
@@ -50,6 +52,7 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				Optional:    true,
 				Default:     0,
 				Description: "Version of the content of the key - Write Only",
+				RequiredWith: []string{"key_content_wo"},
 			},
 			"key_full_path": {
 				Type:        schema.TypeString,
@@ -68,14 +71,16 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				Optional:      true,
 				Sensitive:     true,
 				Description:   "The content of the cert.",
-				ConflictsWith: []string{"cert_content_wo"},
+				ExactlyOneOf:  []string{"cert_content", "cert_content_wo"},
 			},
 			"cert_content_wo": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Sensitive:     true,
+				WriteOnly:     true,
 				Description:   "The content of the cert - Write Only",
-				ConflictsWith: []string{"cert_content"},
+				ExactlyOneOf:  []string{"cert_content", "cert_content_wo"},
+				RequiredWith:  []string{"cert_content_wo_version"},
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					return !d.HasChange("cert_content_wo_version")
 				},
@@ -85,6 +90,7 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				Optional:    true,
 				Default:     0,
 				Description: "Version of the content of the cert - Write Only",
+				RequiredWith: []string{"cert_content_wo"},
 			},
 			"cert_full_path": {
 				Type:        schema.TypeString,
