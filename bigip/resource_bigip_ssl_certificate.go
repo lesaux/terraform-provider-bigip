@@ -222,9 +222,17 @@ func resourceBigipSslCertificateUpdate(ctx context.Context, d *schema.ResourceDa
 	}
 
 	if certpath != "" {
+		// Content changed: upload new certificate bytes and update metadata in one call.
 		err := client.UpdateCertificate(certpath, cert)
 		if err != nil {
 			return diag.FromErr(fmt.Errorf("error in Importing certificate (%s): %s", name, err))
+		}
+	} else if d.HasChange("monitoring_type") || d.HasChange("issuer_cert") || d.HasChange("ocsp") {
+		// Metadata-only change: patch certificate properties without re-uploading content.
+		certName := fmt.Sprintf("/%s/%s", partition, name)
+		err := client.ModifyCertificate(certName, cert)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error updating certificate metadata (%s): %s", name, err))
 		}
 	}
 
