@@ -25,9 +25,23 @@ resource "bigip_ssl_certificate" "test-cert" {
 ### Usage with Ephemeral Resources (Write-Only)
 
 ```hcl
+# Ephemeral TLS certificate (write-only; not stored in state)
+ephemeral "tls_self_signed_cert" "example" {
+  subject {
+    common_name  = "example.com"
+  }
+
+  validity_period_hours = 8760
+  allowed_uses = [
+    "digital_signature",
+    "key_encipherment",
+    "server_auth",
+  ]
+}
+
 resource "bigip_ssl_certificate" "example" {
   name               = "servercert.crt"
-  content_wo         = ephemeral.tls_certificate.example.certificate_pem
+  content_wo         = ephemeral.tls_self_signed_cert.example.cert_pem
   content_wo_version = "1"
   partition          = "Common"
 }
