@@ -48,9 +48,9 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				},
 			},
 			"key_content_wo_version": {
-				Type:         schema.TypeInt,
+				Type:         schema.TypeString,
 				Optional:     true,
-				Default:      0,
+				Default:      "",
 				Description:  "Version of the content of the key - Write Only",
 				RequiredWith: []string{"key_content_wo"},
 			},
@@ -86,9 +86,9 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				},
 			},
 			"cert_content_wo_version": {
-				Type:         schema.TypeInt,
+				Type:         schema.TypeString,
 				Optional:     true,
-				Default:      0,
+				Default:      "",
 				Description:  "Version of the content of the cert - Write Only",
 				RequiredWith: []string{"cert_content_wo"},
 			},
@@ -170,6 +170,7 @@ func resourceBigipSSLKeyCertCreate(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	mutex.Lock()
+	defer mutex.Unlock()
 	t, err := client.StartTransaction()
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error while starting transaction: %v", err))
@@ -187,7 +188,6 @@ func resourceBigipSSLKeyCertCreate(ctx context.Context, d *schema.ResourceData, 
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error while ending transaction: %d", err))
 	}
-	mutex.Unlock()
 
 	if val, ok := d.GetOk("cert_ocsp"); ok {
 		certValidState := &bigip.CertValidatorState{Name: val.(string)}
@@ -318,7 +318,8 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 			return diag.FromErr(fmt.Errorf("error while updating the ssl certificate (%s): %s", certName, err))
 		}
 	} else if metadataChanged {
-		err = client.ModifyCertificate(cert)
+		certFullPath := fmt.Sprintf("/%s/%s", partition, certName)
+		err = client.ModifyCertificate(certFullPath, cert)
 		if err != nil {
 			return diag.FromErr(fmt.Errorf("error while modifying the ssl certificate (%s): %s", certName, err))
 		}
