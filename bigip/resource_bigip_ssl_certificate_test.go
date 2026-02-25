@@ -131,6 +131,15 @@ resource "bigip_ssl_certificate" "test-cert-wo" {
 }
 `
 
+var TestSslCertResourceWriteOnlyV2 = `
+resource "bigip_ssl_certificate" "test-cert-wo" {
+        name = "servercert_wo.crt"
+        content_wo = file("` + folder + `/../examples/servercert.crt")
+        content_wo_version = "2"
+        partition = "Common"
+}
+`
+
 func TestAccBigipSslCertificateWriteOnly(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -140,11 +149,30 @@ func TestAccBigipSslCertificateWriteOnly(t *testing.T) {
 		CheckDestroy: testChecksslcertificateDestroyed,
 		Steps: []resource.TestStep{
 			{
+				// Step 1: create the certificate using write-only content with version "1".
 				Config: TestSslCertResourceWriteOnly,
 				Check: resource.ComposeTestCheckFunc(
 					testChecksslcertificateExists("servercert_wo.crt", true),
 					resource.TestCheckResourceAttr("bigip_ssl_certificate.test-cert-wo", "partition", "Common"),
 					resource.TestCheckResourceAttr("bigip_ssl_certificate.test-cert-wo", "content_wo_version", "1"),
+				),
+			},
+			{
+				// Step 2: re-apply the identical config (same content, same version).
+				// DiffSuppressFunc suppresses the content_wo diff when content_wo_version
+				// has not changed, so the plan must be empty — no spurious re-upload.
+				Config:             TestSslCertResourceWriteOnly,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				// Step 3: bump content_wo_version to "2" to signal that the certificate
+				// bytes have changed. This should produce a non-empty plan and trigger
+				// the update path that re-uploads the certificate content.
+				Config: TestSslCertResourceWriteOnlyV2,
+				Check: resource.ComposeTestCheckFunc(
+					testChecksslcertificateExists("servercert_wo.crt", true),
+					resource.TestCheckResourceAttr("bigip_ssl_certificate.test-cert-wo", "content_wo_version", "2"),
 				),
 			},
 		},
