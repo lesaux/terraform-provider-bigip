@@ -288,6 +288,7 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	mutex.Lock()
+	defer mutex.Unlock()
 	t, err := client.StartTransaction()
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error while trying to start transaction: %s", err))
@@ -314,7 +315,6 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error while trying to end transaction: %s", err))
 	}
-	mutex.Unlock()
 
 	return resourceBigipSSLKeyCertRead(ctx, d, meta)
 }
