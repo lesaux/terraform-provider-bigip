@@ -122,6 +122,35 @@ func TestAccBigipSslCertificateOCSP(t *testing.T) {
 	})
 }
 
+var TestSslCertResourceWriteOnly = `
+resource "bigip_ssl_certificate" "test-cert-wo" {
+        name = "servercert_wo.crt"
+        content_wo = file("` + folder + `/../examples/servercert.crt")
+        content_wo_version = "1"
+        partition = "Common"
+}
+`
+
+func TestAccBigipSslCertificateWriteOnly(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers:    testAccProviders,
+		CheckDestroy: testChecksslcertificateDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: TestSslCertResourceWriteOnly,
+				Check: resource.ComposeTestCheckFunc(
+					testChecksslcertificateExists("servercert_wo.crt", true),
+					resource.TestCheckResourceAttr("bigip_ssl_certificate.test-cert-wo", "partition", "Common"),
+					resource.TestCheckResourceAttr("bigip_ssl_certificate.test-cert-wo", "content_wo_version", "1"),
+				),
+			},
+		},
+	})
+}
+
 func testChecksslcertificateExists(name string, exists bool) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		client := testAccProvider.Meta().(*bigip.BigIP)

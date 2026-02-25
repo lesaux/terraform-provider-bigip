@@ -172,7 +172,13 @@ func resourceBigipSslKeyUpdate(ctx context.Context, d *schema.ResourceData, meta
 	log.Println("[INFO] Certificate key Name " + name)
 	certpath := d.Get("content").(string)
 	if certpath == "" {
-		certpath = d.Get("content_wo").(string)
+		if d.HasChange("content_wo") {
+			certpath = d.Get("content_wo").(string)
+		}
+	} else {
+		if !d.HasChange("content") {
+			certpath = ""
+		}
 	}
 	/*if !strings.HasSuffix(name, ".key") {
 		name = name + ".key"

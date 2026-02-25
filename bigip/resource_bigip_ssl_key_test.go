@@ -136,7 +136,7 @@ ephemeral "tls_private_key" "wo" {
 resource "bigip_ssl_key" "test-key-wo" {
         name = "` + SslkeyName_wo + `"
         content_wo = ephemeral.tls_private_key.wo.private_key_pem
-		content_wo_version : 1
+		content_wo_version = "1"
         partition = "` + TestPartition + `"
 }
 `
@@ -149,7 +149,7 @@ ephemeral "tls_private_key" "wo" {
 resource "bigip_ssl_key" "test-key-wo" {
         name = "` + SslkeyName_wo + `"
         content_wo = ephemeral.tls_private_key.wo.private_key_pem
-		content_wo_version : 2
+		content_wo_version = "2"
         partition = "` + TestPartition + `"
 }
 `
@@ -163,7 +163,7 @@ ephemeral "tls_private_key" "wo" {
 resource "bigip_ssl_key" "test-key-wo" {
         name = "` + SslkeyName_wo + `"
         content_wo = ephemeral.tls_private_key.wo.private_key_pem
-		content_wo_version : 1
+		content_wo_version = "1"
         partition = "` + TestPartition + `"
 }
 `
@@ -235,7 +235,7 @@ resource "bigip_ssl_key" "test-key-wo-conflict" {
         name = "serverkey_wo_conflict.key"
         content = ephemeral.tls_private_key.wo.private_key_pem
         content_wo = ephemeral.tls_private_key.wo.private_key_pem
-		content_wo_version : 1
+		content_wo_version = "1"
         partition = "` + TestPartition + `"
 }
 `
