@@ -193,7 +193,10 @@ func resourceBigipSslCertificateUpdate(ctx context.Context, d *schema.ResourceDa
 	log.Println("[INFO] Certificate Name " + name)
 	certpath := d.Get("content").(string)
 	if certpath == "" {
-		if d.HasChange("content_wo") {
+		// content_wo is write-only (never stored in state), so d.HasChange("content_wo")
+		// always returns true when the field is configured. Use the version field instead,
+		// which IS stored in state and is the user-controlled signal for "certificate changed".
+		if d.HasChange("content_wo_version") {
 			certpath = d.Get("content_wo").(string)
 		}
 	} else {
