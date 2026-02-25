@@ -33,11 +33,30 @@ func resourceBigipSslCertificate() *schema.Resource {
 				ForceNew:    true,
 			},
 			"content": {
-				Type:      schema.TypeString,
-				Required:  true,
-				Sensitive: true,
-				//ForceNew:    true,
-				Description: "Content of certificate on Disk",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Sensitive:    true,
+				Description:  "Content of certificate on Disk",
+				ExactlyOneOf: []string{"content", "content_wo"},
+			},
+			"content_wo": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Sensitive:    true,
+				WriteOnly:    true,
+				Description:  "Content of certificate on Disk - Write Only",
+				ExactlyOneOf: []string{"content", "content_wo"},
+				RequiredWith: []string{"content_wo_version"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("content_wo_version")
+				},
+			},
+			"content_wo_version": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      "",
+				Description:  "Version of Content of certificate on Disk - Write Only",
+				RequiredWith: []string{"content_wo"},
 			},
 			"partition": {
 				Type:         schema.TypeString,
@@ -77,6 +96,9 @@ func resourceBigipSslCertificateCreate(ctx context.Context, d *schema.ResourceDa
 	log.Println("[INFO] Certificate Name " + name)
 
 	certPath := d.Get("content").(string)
+	if certPath == "" {
+		certPath = d.Get("content_wo").(string)
+	}
 	partition := d.Get("partition").(string)
 	cert := &bigip.Certificate{
 		Name:      name,
@@ -170,6 +192,9 @@ func resourceBigipSslCertificateUpdate(ctx context.Context, d *schema.ResourceDa
 	name := d.Id()
 	log.Println("[INFO] Certificate Name " + name)
 	certpath := d.Get("content").(string)
+	if certpath == "" {
+		certpath = d.Get("content_wo").(string)
+	}
 	partition := d.Get("partition").(string)
 
 	cert := &bigip.Certificate{
