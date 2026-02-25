@@ -38,9 +38,9 @@ resource "bigip_ssl_certificate" "example" {
 
 * `name`- (Required) Name of the SSL Certificate to be Imported on to BIGIP
 
-* `content` - (Optional) Content of certificate on Local Disk, path of SSL certificate can be provided to terraform `file` function.
+* `content` - (Required, exactly one of `content` or `content_wo` must be specified) Content of certificate on Local Disk, path of SSL certificate can be provided to terraform `file` function.
 
-* `content_wo` - (Optional) Content of the SSL certificate. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `content` is useful when using ephemeral resources to ensure sensitive data is not persisted.
+* `content_wo` - (Required, exactly one of `content` or `content_wo` must be specified) Content of the SSL certificate. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `content` is useful when using ephemeral resources to ensure sensitive data is not persisted.
 
 * `content_wo_version` - (Optional) This attribute is used to trigger an update when `content_wo` changes. If the content changes, you must change this string (e.g. increment version or use a checksum) to force Terraform to update the resource.
 
