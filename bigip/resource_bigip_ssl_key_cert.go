@@ -255,8 +255,10 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 	partition := d.Get("partition").(string)
 	passphrase := d.Get("passphrase").(string)
 	certName := d.Get("cert_name").(string)
-	certPath := d.Get("cert_content").(string)
-	if certPath == "" {
+	certPath := ""
+	if d.HasChange("cert_content") {
+		certPath = d.Get("cert_content").(string)
+	} else if d.HasChange("cert_content_wo_version") {
 		certPath = d.Get("cert_content_wo").(string)
 	}
 
@@ -310,9 +312,10 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 	// Determine whether certificate metadata-only fields changed.
 	metadataChanged := d.HasChange("cert_monitoring_type") || d.HasChange("issuer_cert") || d.HasChange("cert_ocsp")
 
-	// Only re-upload certificate content when it actually changed. For metadata-only
+	// Only re-upload certificate content when it actually changed (certPath is non-empty
+	// only when cert_content or cert_content_wo_version changed). For metadata-only
 	// updates (monitoring/issuer/OCSP), use ModifyCertificate instead.
-	if certPath != "" && (d.HasChange("cert_content") || d.HasChange("cert_content_wo_version")) {
+	if certPath != "" {
 		err = client.UpdateCertificate(certPath, cert)
 		if err != nil {
 			return diag.FromErr(fmt.Errorf("error while updating the ssl certificate (%s): %s", certName, err))
