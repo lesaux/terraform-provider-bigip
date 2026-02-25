@@ -246,8 +246,10 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 	client := meta.(*bigip.BigIP)
 
 	keyName := d.Get("key_name").(string)
-	keyPath := d.Get("key_content").(string)
-	if keyPath == "" {
+	keyPath := ""
+	if d.HasChange("key_content") {
+		keyPath = d.Get("key_content").(string)
+	} else if d.HasChange("key_content_wo_version") {
 		keyPath = d.Get("key_content_wo").(string)
 	}
 	partition := d.Get("partition").(string)
