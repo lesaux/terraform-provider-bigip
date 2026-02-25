@@ -48,15 +48,15 @@ resource "bigip_ssl_key" "example" {
 
 * `name`- (Required,type `string`) Name of the SSL Certificate key to be Imported on to BIGIP
 
-* `content` - (Optional) Content of the SSL certificate key. Typically used with the `file` function to read from a file on the local disk.
+* `content` - (Optional) Content of the SSL certificate key. Typically used with the `file` function to read from a file on the local disk. Exactly one of `content` or `content_wo` must be specified.
 
-* `content_wo` - (Optional) Content of the SSL certificate key. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `content` is useful when using ephemeral resources to ensure sensitive data is not persisted.
+* `content_wo` - (Optional) Content of the SSL certificate key. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `content` is useful when using ephemeral resources to ensure sensitive data is not persisted. Exactly one of `content` or `content_wo` must be specified.
 
 * `content_wo_version` - (Optional) This attribute is used to trigger an update when `content_wo` changes. If the content of the key changes, you must change this string (e.g. increment version or use a checksum) to force Terraform to update the resource.
 
-* `passphrase` - (Optional) Passphrase on key.
+* `passphrase` - (Optional) Passphrase on key. Conflicts with `passphrase_wo`; only one of `passphrase` or `passphrase_wo` may be set.
 
-* `passphrase_wo` - (Optional) Passphrase on key. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `passphrase` is useful when using ephemeral resources to ensure sensitive data is not persisted.
+* `passphrase_wo` - (Optional) Passphrase on key. This attribute is write-only and will not be stored in the state file. Passing this attribute instead of `passphrase` is useful when using ephemeral resources to ensure sensitive data is not persisted. Conflicts with `passphrase`; only one of `passphrase` or `passphrase_wo` may be set.
 
 * `passphrase_wo_version` - (Optional) This attribute is used to trigger an update when `passphrase_wo` changes. If the passphrase changes, you must change this string (e.g. increment version or use a checksum) to force Terraform to update the resource.
 
