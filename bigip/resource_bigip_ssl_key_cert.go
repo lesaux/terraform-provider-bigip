@@ -305,10 +305,20 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 		cert.CertValidatorRef = certValidRef
 	}
 
-	if certPath != "" {
+	// Determine whether certificate metadata-only fields changed.
+	metadataChanged := d.HasChange("cert_monitoring_type") || d.HasChange("issuer_cert") || d.HasChange("cert_ocsp")
+
+	// Only re-upload certificate content when it actually changed. For metadata-only
+	// updates (monitoring/issuer/OCSP), use ModifyCertificate instead.
+	if certPath != "" && (d.HasChange("cert_content") || d.HasChange("cert_content_wo_version")) {
 		err = client.UpdateCertificate(certPath, cert)
 		if err != nil {
 			return diag.FromErr(fmt.Errorf("error while updating the ssl certificate (%s): %s", certName, err))
+		}
+	} else if metadataChanged {
+		err = client.ModifyCertificate(cert)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error while modifying the ssl certificate (%s): %s", certName, err))
 		}
 	}
 	err = client.CommitTransaction(t.TransID)
