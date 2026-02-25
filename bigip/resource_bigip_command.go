@@ -36,11 +36,36 @@ func resourceBigipCommand() *schema.Resource {
 			},
 			"commands": {
 				Type:     schema.TypeList,
-				Required: true,
+				Optional: true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "The commands to send to the remote BIG-IP device over the configured provider",
+				Description:   "The commands to send to the remote BIG-IP device over the configured provider",
+				ConflictsWith: []string{"commands_wo"},
+				AtLeastOneOf:  []string{"commands", "commands_wo"},
+			},
+			"commands_wo": {
+				Type:      schema.TypeList,
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description:   "The commands to send to the remote BIG-IP device - Write Only. Use when commands contain sensitive or ephemeral values that should not be stored in state.",
+				ConflictsWith: []string{"commands"},
+				AtLeastOneOf:  []string{"commands", "commands_wo"},
+				RequiredWith:  []string{"commands_wo_version"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("commands_wo_version")
+				},
+			},
+			"commands_wo_version": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Default:       "",
+				Description:   "Version token for commands_wo. Change this value to trigger re-execution when write-only commands change.",
+				RequiredWith:  []string{"commands_wo"},
 			},
 			"command_result": {
 				Type:     schema.TypeList,
@@ -59,12 +84,14 @@ func resourceBigipCommandCreate(ctx context.Context, d *schema.ResourceData, met
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "apply" {
-		if m, ok := d.GetOk("commands"); ok {
-			for _, cmd := range m.([]interface{}) {
-				// Handle edge case where command contains our quote character
-				escapedCmd := strings.ReplaceAll(cmd.(string), "'", "'\\''")
-				commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", escapedCmd))
-			}
+		cmds := d.Get("commands").([]interface{})
+		if len(cmds) == 0 {
+			cmds = d.Get("commands_wo").([]interface{})
+		}
+		for _, cmd := range cmds {
+			// Handle edge case where command contains our quote character
+			escapedCmd := strings.ReplaceAll(cmd.(string), "'", "'\\''")
+			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", escapedCmd))
 		}
 		log.Printf("[INFO] Running TMSH Command : %v ", commandList)
 		var resultList []string
@@ -113,10 +140,12 @@ func resourceBigipCommandUpdate(ctx context.Context, d *schema.ResourceData, met
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "apply" {
-		if m, ok := d.GetOk("commands"); ok {
-			for _, cmd := range m.([]interface{}) {
-				commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
-			}
+		cmds := d.Get("commands").([]interface{})
+		if len(cmds) == 0 {
+			cmds = d.Get("commands_wo").([]interface{})
+		}
+		for _, cmd := range cmds {
+			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
 		}
 		log.Printf("[INFO] Running TMSH Command : %v ", commandList)
 		var resultList []string
@@ -140,10 +169,12 @@ func resourceBigipCommandDelete(ctx context.Context, d *schema.ResourceData, met
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "destroy" {
-		if m, ok := d.GetOk("commands"); ok {
-			for _, cmd := range m.([]interface{}) {
-				commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
-			}
+		cmds := d.Get("commands").([]interface{})
+		if len(cmds) == 0 {
+			cmds = d.Get("commands_wo").([]interface{})
+		}
+		for _, cmd := range cmds {
+			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
 		}
 		log.Printf("[INFO] Running Delete TMSH Command: %v ", commandList)
 
