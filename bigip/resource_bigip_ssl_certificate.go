@@ -193,7 +193,13 @@ func resourceBigipSslCertificateUpdate(ctx context.Context, d *schema.ResourceDa
 	log.Println("[INFO] Certificate Name " + name)
 	certpath := d.Get("content").(string)
 	if certpath == "" {
-		certpath = d.Get("content_wo").(string)
+		if d.HasChange("content_wo") {
+			certpath = d.Get("content_wo").(string)
+		}
+	} else {
+		if !d.HasChange("content") {
+			certpath = ""
+		}
 	}
 	partition := d.Get("partition").(string)
 
@@ -215,9 +221,11 @@ func resourceBigipSslCertificateUpdate(ctx context.Context, d *schema.ResourceDa
 		cert.CertValidatorRef = certValidRef
 	}
 
-	err := client.UpdateCertificate(certpath, cert)
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("error in Importing certificate (%s): %s", name, err))
+	if certpath != "" {
+		err := client.UpdateCertificate(certpath, cert)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error in Importing certificate (%s): %s", name, err))
+		}
 	}
 
 	return resourceBigipSslCertificateRead(ctx, d, meta)
