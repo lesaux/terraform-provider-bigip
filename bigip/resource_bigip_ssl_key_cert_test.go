@@ -170,13 +170,13 @@ ephemeral "tls_self_signed_cert" "wo" {
 }
 
 resource "bigip_ssl_key_cert" "testkeycert_wo" {
-  partition          = "Common"
-  key_name           = "ssl-test-key-wo"
-  key_content_wo     = ephemeral.tls_private_key.wo.private_key_pem
-  key_content_wo_version = 1
-  cert_name          = "ssl-test-cert-wo"
-  cert_content_wo    = ephemeral.tls_self_signed_cert.wo.cert_pem
-  cert_content_wo_version = 1
+  partition               = "Common"
+  key_name                = "ssl-test-key-wo"
+  key_content_wo          = ephemeral.tls_private_key.wo.private_key_pem
+  key_content_wo_version  = "1"
+  cert_name               = "ssl-test-cert-wo"
+  cert_content_wo         = ephemeral.tls_self_signed_cert.wo.cert_pem
+  cert_content_wo_version = "1"
 }
 `
 
@@ -201,13 +201,13 @@ ephemeral "tls_self_signed_cert" "wo" {
 }
 
 resource "bigip_ssl_key_cert" "testkeycert_wo" {
-  partition          = "Common"
-  key_name           = "ssl-test-key-wo"
-  key_content_wo     = ephemeral.tls_private_key.wo.private_key_pem
-  key_content_wo_version = 2
-  cert_name          = "ssl-test-cert-wo"
-  cert_content_wo    = ephemeral.tls_self_signed_cert.wo.cert_pem
-  cert_content_wo_version = 2
+  partition               = "Common"
+  key_name                = "ssl-test-key-wo"
+  key_content_wo          = ephemeral.tls_private_key.wo.private_key_pem
+  key_content_wo_version  = "2"
+  cert_name               = "ssl-test-cert-wo"
+  cert_content_wo         = ephemeral.tls_self_signed_cert.wo.cert_pem
+  cert_content_wo_version = "2"
 }
 `
 
@@ -232,13 +232,13 @@ ephemeral "tls_self_signed_cert" "wo" {
 }
 
 resource "bigip_ssl_key_cert" "testkeycert_wo" {
-  partition          = "Common"
-  key_name           = "ssl-test-key-wo"
-  key_content_wo     = ephemeral.tls_private_key.wo.private_key_pem
-  key_content_wo_version = 1
-  cert_name          = "ssl-test-cert-wo"
-  cert_content_wo    = ephemeral.tls_self_signed_cert.wo.cert_pem
-  cert_content_wo_version = 1
+  partition               = "Common"
+  key_name                = "ssl-test-key-wo"
+  key_content_wo          = ephemeral.tls_private_key.wo.private_key_pem
+  key_content_wo_version  = "1"
+  cert_name               = "ssl-test-cert-wo"
+  cert_content_wo         = ephemeral.tls_self_signed_cert.wo.cert_pem
+  cert_content_wo_version = "1"
 }
 `
 
@@ -308,6 +308,118 @@ func TestAccBigipSSLCertKeyCreateWOSuppressDiff(t *testing.T) {
 	})
 }
 
+// testResourceSSLKeyCertWOMetadataBase creates a key+cert resource using write-only
+// content with no metadata fields set. Used as the baseline for metadata-only update tests.
+var testResourceSSLKeyCertWOMetadataBase = `
+ephemeral "tls_private_key" "meta" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+ephemeral "tls_self_signed_cert" "meta" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.meta.private_key_pem
+  subject {
+    common_name  = "meta-test.example.com"
+    organization = "ACME"
+  }
+  validity_period_hours = 12
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
+resource "bigip_ssl_key_cert" "testkeycert_meta" {
+  partition               = "Common"
+  key_name                = "ssl-test-key-meta"
+  key_content_wo          = ephemeral.tls_private_key.meta.private_key_pem
+  key_content_wo_version  = "1"
+  cert_name               = "ssl-test-cert-meta"
+  cert_content_wo         = ephemeral.tls_self_signed_cert.meta.cert_pem
+  cert_content_wo_version = "1"
+}
+`
+
+// testResourceSSLKeyCertWOMetadataUpdated keeps the same content versions so that
+// certPath remains empty in the Update function, but adds issuer_cert to trigger
+// the metadata-only ModifyCertificate branch instead of UpdateCertificate.
+var testResourceSSLKeyCertWOMetadataUpdated = `
+ephemeral "tls_private_key" "meta" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+ephemeral "tls_self_signed_cert" "meta" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.meta.private_key_pem
+  subject {
+    common_name  = "meta-test.example.com"
+    organization = "ACME"
+  }
+  validity_period_hours = 12
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
+resource "bigip_ssl_key_cert" "testkeycert_meta" {
+  partition               = "Common"
+  key_name                = "ssl-test-key-meta"
+  key_content_wo          = ephemeral.tls_private_key.meta.private_key_pem
+  key_content_wo_version  = "1"
+  cert_name               = "ssl-test-cert-meta"
+  cert_content_wo         = ephemeral.tls_self_signed_cert.meta.cert_pem
+  cert_content_wo_version = "1"
+  # issuer_cert added without bumping content versions — exercises the metadata-only
+  # ModifyCertificate path; UpdateCertificate must NOT be called here.
+  issuer_cert = "/Common/ca-bundle.crt"
+}
+`
+
+// TestAccBigipSSLCertKeyWriteOnlyMetadataUpdate verifies that when only metadata
+// fields change (issuer_cert here) while content version stays the same, the update
+// logic takes the metadata-only ModifyCertificate branch and does NOT re-upload content.
+func TestAccBigipSSLCertKeyWriteOnlyMetadataUpdate(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create with write-only content, no metadata fields.
+				Config: testResourceSSLKeyCertWOMetadataBase,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_meta", "key_name", "ssl-test-key-meta"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_meta", "cert_name", "ssl-test-cert-meta"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_meta", "key_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_meta", "cert_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_meta", "partition", "Common"),
+				),
+			},
+			{
+				// Step 2: add issuer_cert WITHOUT changing content versions.
+				// certPath will be "" in resourceBigipSSLKeyCertUpdate (HasChange on versions is false),
+				// so the update must go through the metadata-only ModifyCertificate branch.
+				Config: testResourceSSLKeyCertWOMetadataUpdated,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_meta", "key_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_meta", "cert_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_meta", "issuer_cert", "/Common/ca-bundle.crt"),
+				),
+			},
+			{
+				// Step 3: re-apply metadata config — plan must be empty (no drift).
+				Config:             testResourceSSLKeyCertWOMetadataUpdated,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 var testResourceSSLKeyCertWOConflict = `
 ephemeral "tls_private_key" "wo" {
   algorithm = "RSA"
@@ -329,17 +441,17 @@ ephemeral "tls_self_signed_cert" "wo" {
 }
 
 resource "bigip_ssl_key_cert" "testkeycert_wo_conflict" {
-  partition          = "Common"
-  key_name           = "ssl-test-key-wo-conflict"
-  
-  key_content        = ephemeral.tls_private_key.wo.private_key_pem
-  key_content_wo     = ephemeral.tls_private_key.wo.private_key_pem
-  key_content_wo_version = 1
-  
-  cert_name          = "ssl-test-cert-wo-conflict"
-  cert_content       = ephemeral.tls_self_signed_cert.wo.cert_pem
-  cert_content_wo    = ephemeral.tls_self_signed_cert.wo.cert_pem
-  cert_content_wo_version = 1
+  partition               = "Common"
+  key_name                = "ssl-test-key-wo-conflict"
+
+  key_content             = ephemeral.tls_private_key.wo.private_key_pem
+  key_content_wo          = ephemeral.tls_private_key.wo.private_key_pem
+  key_content_wo_version  = "1"
+
+  cert_name               = "ssl-test-cert-wo-conflict"
+  cert_content            = ephemeral.tls_self_signed_cert.wo.cert_pem
+  cert_content_wo         = ephemeral.tls_self_signed_cert.wo.cert_pem
+  cert_content_wo_version = "1"
 }
 `
 
