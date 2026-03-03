@@ -78,7 +78,9 @@ func resourceBigipSslKeyCreate(ctx context.Context, d *schema.ResourceData, meta
 	log.Println("[INFO] Certificate Key Name " + name)
 	certpath := d.Get("content").(string)
 	if certpath == "" {
-		certpath = d.Get("content_wo").(string)
+		if !d.GetRawConfig().GetAttr("content_wo").IsNull() && d.GetRawConfig().GetAttr("content_wo").IsKnown() {
+			certpath = d.GetRawConfig().GetAttr("content_wo").AsString()
+		}
 	}
 	if certpath == "" {
 		return diag.Errorf("key content is empty for %s: neither 'content' nor 'content_wo' provided a value — check that the private key is being passed correctly from Vault", name)
@@ -144,7 +146,9 @@ func resourceBigipSslKeyUpdate(ctx context.Context, d *schema.ResourceData, meta
 		// always returns true when the field is configured. Use the version field instead,
 		// which IS stored in state and is the user-controlled signal for "key changed".
 		if d.HasChange("content_wo_version") {
-			certpath = d.Get("content_wo").(string)
+			if !d.GetRawConfig().GetAttr("content_wo").IsNull() && d.GetRawConfig().GetAttr("content_wo").IsKnown() {
+				certpath = d.GetRawConfig().GetAttr("content_wo").AsString()
+			}
 		}
 	} else {
 		if !d.HasChange("content") {

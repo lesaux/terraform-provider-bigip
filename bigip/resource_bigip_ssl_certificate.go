@@ -97,7 +97,9 @@ func resourceBigipSslCertificateCreate(ctx context.Context, d *schema.ResourceDa
 
 	certPath := d.Get("content").(string)
 	if certPath == "" {
-		certPath = d.Get("content_wo").(string)
+		if !d.GetRawConfig().GetAttr("content_wo").IsNull() && d.GetRawConfig().GetAttr("content_wo").IsKnown() {
+			certPath = d.GetRawConfig().GetAttr("content_wo").AsString()
+		}
 	}
 	partition := d.Get("partition").(string)
 	cert := &bigip.Certificate{
@@ -197,7 +199,9 @@ func resourceBigipSslCertificateUpdate(ctx context.Context, d *schema.ResourceDa
 		// always returns true when the field is configured. Use the version field instead,
 		// which IS stored in state and is the user-controlled signal for "certificate changed".
 		if d.HasChange("content_wo_version") {
-			certpath = d.Get("content_wo").(string)
+			if !d.GetRawConfig().GetAttr("content_wo").IsNull() && d.GetRawConfig().GetAttr("content_wo").IsKnown() {
+				certpath = d.GetRawConfig().GetAttr("content_wo").AsString()
+			}
 		}
 	} else {
 		if !d.HasChange("content") {
