@@ -80,6 +80,9 @@ func resourceBigipSslKeyCreate(ctx context.Context, d *schema.ResourceData, meta
 	if certpath == "" {
 		certpath = d.Get("content_wo").(string)
 	}
+	if certpath == "" {
+		return diag.Errorf("key content is empty for %s: neither 'content' nor 'content_wo' provided a value — check that the private key is being passed correctly from Vault", name)
+	}
 	partition := d.Get("partition").(string)
 	sourcePath, err := client.UploadKey(name, certpath)
 	if err != nil {
