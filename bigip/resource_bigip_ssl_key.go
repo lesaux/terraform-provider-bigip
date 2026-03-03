@@ -81,12 +81,7 @@ func resourceBigipSslKeyCreate(ctx context.Context, d *schema.ResourceData, meta
 		certpath = d.Get("content_wo").(string)
 	}
 	partition := d.Get("partition").(string)
-	}
 	/*if !strings.HasSuffix(name, ".key") {
-		name = name + ".key"
-	}*/
-
-	sourcePath, err := client.UploadKey(name, certpath)
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error in Uploading certificate key (%s): %s", name, err))
 	}
@@ -157,7 +152,6 @@ func resourceBigipSslKeyUpdate(ctx context.Context, d *schema.ResourceData, meta
 		name = name + ".key"
 	}*/
 	partition := d.Get("partition").(string)
-	}
 
 	var sourcePath string
 	var err error
