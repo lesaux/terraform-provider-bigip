@@ -7,7 +7,6 @@ package bigip
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -41,29 +40,7 @@ func resourceBigipCommand() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description:   "The commands to send to the remote BIG-IP device over the configured provider",
-				ConflictsWith: []string{"commands_wo"},
-				AtLeastOneOf:  []string{"commands", "commands_wo"},
-			},
-			"commands_wo": {
-				Type:          schema.TypeString,
-				Optional:      true,
-				Sensitive:     true,
-				WriteOnly:     true,
-				Description:   "JSON-encoded list of commands to send to the remote BIG-IP device - Write Only. Use jsonencode([\"cmd1\", \"cmd2\"]). Use when commands contain sensitive or ephemeral values that should not be stored in state.",
-				ConflictsWith: []string{"commands"},
-				AtLeastOneOf:  []string{"commands", "commands_wo"},
-				RequiredWith:  []string{"commands_wo_version"},
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return !d.HasChange("commands_wo_version")
-				},
-			},
-			"commands_wo_version": {
-				Type:          schema.TypeString,
-				Optional:      true,
-				Default:       "",
-				Description:   "Version token for commands_wo. Change this value to trigger re-execution when write-only commands change.",
-				RequiredWith:  []string{"commands_wo"},
+				Description: "The commands to send to the remote BIG-IP device over the configured provider",
 			},
 			"command_result": {
 				Type:     schema.TypeList,
@@ -78,37 +55,13 @@ func resourceBigipCommand() *schema.Resource {
 	}
 }
 
-func commandsFromResourceData(d *schema.ResourceData) ([]string, error) {
-	cmds := d.Get("commands").([]interface{})
-	if len(cmds) > 0 {
-		var result []string
-		for _, cmd := range cmds {
-			result = append(result, cmd.(string))
-		}
-		return result, nil
-	}
-	cmdsWo := d.Get("commands_wo").(string)
-	if cmdsWo == "" {
-		return nil, nil
-	}
-	var result []string
-	if err := json.Unmarshal([]byte(cmdsWo), &result); err != nil {
-		return nil, fmt.Errorf("commands_wo must be a JSON-encoded list of strings: %w", err)
-	}
-	return result, nil
-}
-
 func resourceBigipCommandCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "apply" {
-		cmds, err := commandsFromResourceData(d)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		for _, cmd := range cmds {
+		for _, cmd := range d.Get("commands").([]interface{}) {
 			// Handle edge case where command contains our quote character
-			escapedCmd := strings.ReplaceAll(cmd, "'", "'\\''")
+			escapedCmd := strings.ReplaceAll(cmd.(string), "'", "'\\''")
 			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", escapedCmd))
 		}
 		log.Printf("[INFO] Running TMSH Command : %v ", commandList)
@@ -158,12 +111,8 @@ func resourceBigipCommandUpdate(ctx context.Context, d *schema.ResourceData, met
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "apply" {
-		cmds, err := commandsFromResourceData(d)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		for _, cmd := range cmds {
-			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd))
+		for _, cmd := range d.Get("commands").([]interface{}) {
+			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
 		}
 		log.Printf("[INFO] Running TMSH Command : %v ", commandList)
 		var resultList []string
@@ -187,12 +136,8 @@ func resourceBigipCommandDelete(ctx context.Context, d *schema.ResourceData, met
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "destroy" {
-		cmds, err := commandsFromResourceData(d)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		for _, cmd := range cmds {
-			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd))
+		for _, cmd := range d.Get("commands").([]interface{}) {
+			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
 		}
 		log.Printf("[INFO] Running Delete TMSH Command: %v ", commandList)
 
