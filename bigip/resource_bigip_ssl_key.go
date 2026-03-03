@@ -55,32 +55,6 @@ func resourceBigipSslKey() *schema.Resource {
 				Description:  "Version of Content of SSL certificate key present on local Disk - Write Only",
 				RequiredWith: []string{"content_wo"},
 			},
-			"passphrase": {
-				Type:          schema.TypeString,
-				Optional:      true,
-				Sensitive:     true,
-				Description:   "Passphrase on key.",
-				ConflictsWith: []string{"passphrase_wo"},
-			},
-			"passphrase_wo": {
-				Type:          schema.TypeString,
-				Optional:      true,
-				Sensitive:     true,
-				WriteOnly:     true,
-				Description:   "Passphrase on key - Write Only",
-				ConflictsWith: []string{"passphrase"},
-				RequiredWith:  []string{"passphrase_wo_version"},
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return !d.HasChange("passphrase_wo_version")
-				},
-			},
-			"passphrase_wo_version": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				Default:      "",
-				Description:  "Version of Passphrase on key - Write Only",
-				RequiredWith: []string{"passphrase_wo"},
-			},
 			"partition": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -107,9 +81,6 @@ func resourceBigipSslKeyCreate(ctx context.Context, d *schema.ResourceData, meta
 		certpath = d.Get("content_wo").(string)
 	}
 	partition := d.Get("partition").(string)
-	passPhrase := d.Get("passphrase").(string)
-	if passPhrase == "" {
-		passPhrase = d.Get("passphrase_wo").(string)
 	}
 	/*if !strings.HasSuffix(name, ".key") {
 		name = name + ".key"
@@ -123,7 +94,6 @@ func resourceBigipSslKeyCreate(ctx context.Context, d *schema.ResourceData, meta
 		Name:       name,
 		SourcePath: sourcePath,
 		Partition:  partition,
-		Passphrase: passPhrase,
 	}
 	log.Printf("[DEBUG] certkey: %+v\n", certkey)
 	err = client.AddKey(&certkey)
@@ -187,9 +157,6 @@ func resourceBigipSslKeyUpdate(ctx context.Context, d *schema.ResourceData, meta
 		name = name + ".key"
 	}*/
 	partition := d.Get("partition").(string)
-	passPhrase := d.Get("passphrase").(string)
-	if passPhrase == "" {
-		passPhrase = d.Get("passphrase_wo").(string)
 	}
 
 	var sourcePath string
@@ -205,7 +172,6 @@ func resourceBigipSslKeyUpdate(ctx context.Context, d *schema.ResourceData, meta
 		Name:       name,
 		SourcePath: sourcePath,
 		Partition:  partition,
-		Passphrase: passPhrase,
 	}
 	keyName := fmt.Sprintf("/%s/%s", partition, name)
 	err = client.ModifyKey(keyName, &certkey)

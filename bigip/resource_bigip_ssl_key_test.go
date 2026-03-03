@@ -255,37 +255,4 @@ func TestAccBigipSslKeyWriteOnlyConflict(t *testing.T) {
 	})
 }
 
-var TestSslKeyResourcePassphraseWriteOnly = `
-ephemeral "tls_private_key" "wo_pass" {
-  algorithm = "RSA"
-  rsa_bits  = 2048
-}
-resource "bigip_ssl_key" "test-key-pass-wo" {
-        name                  = "serverkey_pass_wo.key"
-        content_wo            = ephemeral.tls_private_key.wo_pass.private_key_pem
-        content_wo_version    = "1"
-        passphrase_wo         = "secret123"
-        passphrase_wo_version = "1"
-        partition             = "Common"
-}
-`
 
-func TestAccBigipSslKeyPassphraseWriteOnly(t *testing.T) {
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAcctPreCheck(t)
-		},
-		Providers:    testAccProviders,
-		CheckDestroy: testChecksslKeyDestroyed,
-		Steps: []resource.TestStep{
-			{
-				Config: TestSslKeyResourcePassphraseWriteOnly,
-				Check: resource.ComposeTestCheckFunc(
-					testChecksslkeyExists("serverkey_pass_wo.key", true),
-					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-pass-wo", "partition", "Common"),
-					resource.TestCheckResourceAttr("bigip_ssl_key.test-key-pass-wo", "passphrase_wo_version", "1"),
-				),
-			},
-		},
-	})
-}
