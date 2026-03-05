@@ -20,11 +20,12 @@ import (
 const restDownloadPath = "/var/config/rest/downloads"
 
 // pkcs12InstallRequest is the body for the iControl REST sys/crypto/pkcs12 install command.
+// Note: F5 iControl uses kebab-case for TMSH-mapped fields, so "from-local-file" not "fromLocalFile".
 type pkcs12InstallRequest struct {
 	Command       string `json:"command"`
 	Name          string `json:"name,omitempty"`
 	Partition     string `json:"partition,omitempty"`
-	FromLocalFile string `json:"fromLocalFile,omitempty"`
+	FromLocalFile string `json:"from-local-file,omitempty"`
 	Passphrase    string `json:"passphrase,omitempty"`
 }
 
@@ -46,10 +47,13 @@ type uploadResponse struct {
 // and historically treated (n, io.EOF) — the normal "last chunk" response from
 // bytes.NewReader — as a fatal error. By slicing []byte directly we never touch
 // io.Reader and the EOF problem cannot occur.
-func uploadP12File(client *bigip.BigIP, data []byte, filename string) (string, error) {
+func uploadP12File(client *bigip.BigIP, data []byte, filename string) (localPath string, uploadRespBody string, err error) {
 	const chunkSize = 512 * 1024 // 512 KiB — same as go-bigip default
 
 	size := int64(len(data))
+	if size == 0 {
+		return "", "", fmt.Errorf("uploadP12File called with 0 bytes — p12 data is empty")
+	}
 	uploadURL := fmt.Sprintf("%s/mgmt/shared/file-transfer/uploads/%s", client.Host, filename)
 
 	log.Printf("[DEBUG] uploadP12File: uploading %d bytes to %s", size, uploadURL)
@@ -72,7 +76,7 @@ func uploadP12File(client *bigip.BigIP, data []byte, filename string) (string, e
 
 		req, err := http.NewRequest("POST", uploadURL, bytes.NewReader(data[start:end]))
 		if err != nil {
-			return "", fmt.Errorf("error creating upload request for chunk %d-%d: %w", start, end-1, err)
+			return "", "", fmt.Errorf("error creating upload request for chunk %d-%d: %w", start, end-1, err)
 		}
 		if client.Token != "" {
 			req.Header.Set("X-F5-Auth-Token", client.Token)
@@ -84,12 +88,12 @@ func uploadP12File(client *bigip.BigIP, data []byte, filename string) (string, e
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			return "", fmt.Errorf("error uploading PKCS12 chunk %d-%d: %w", start, end-1, err)
+			return "", "", fmt.Errorf("error uploading PKCS12 chunk %d-%d: %w", start, end-1, err)
 		}
 		lastBody, _ = io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode >= 400 {
-			return "", fmt.Errorf("BIG-IP returned HTTP %d for chunk %d-%d: %s", resp.StatusCode, start, end-1, string(lastBody))
+			return "", "", fmt.Errorf("BIG-IP returned HTTP %d for chunk %d-%d: %s", resp.StatusCode, start, end-1, string(lastBody))
 		}
 
 		log.Printf("[DEBUG] uploadP12File: uploaded bytes %d-%d/%d, response: %s", start, end-1, size, string(lastBody))
@@ -102,10 +106,10 @@ func uploadP12File(client *bigip.BigIP, data []byte, filename string) (string, e
 		// Fall back to the well-known default path if the response can't be parsed.
 		fallback := restDownloadPath + "/" + filename
 		log.Printf("[DEBUG] uploadP12File: could not parse localFilePath from response (%v), using fallback: %s", err, fallback)
-		return fallback, nil
+		return fallback, string(lastBody), nil
 	}
 	log.Printf("[DEBUG] uploadP12File: F5 localFilePath = %s", uploadResp.LocalFilePath)
-	return uploadResp.LocalFilePath, nil
+	return uploadResp.LocalFilePath, string(lastBody), nil
 }
 
 // installPKCS12 uploads raw PKCS12 bytes to BIG-IP and runs the install command.
@@ -117,10 +121,28 @@ func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, 
 
 	log.Printf("[DEBUG] installPKCS12: uploading %s (%d bytes)", filename, len(p12Data))
 
-	localFilePath, err := uploadP12File(client, p12Data, filename)
+	localFilePath, uploadBody, err := uploadP12File(client, p12Data, filename)
 	if err != nil {
 		return fmt.Errorf("error uploading PKCS12 file %s: %w", filename, err)
 	}
+	log.Printf("[DEBUG] installPKCS12: upload response: %s", uploadBody)
+
+	// Verify the file landed on the F5 filesystem. The ls output is captured
+	// so it can be appended to the install error if install fails.
+	lsReq := &bigip.APIRequest{
+		Method:      "post",
+		URL:         "mgmt/tm/util/bash",
+		Body:        fmt.Sprintf(`{"command":"run","utilCmdArgs":"-c 'ls -la %s 2>&1'"}`, localFilePath),
+		ContentType: "application/json",
+	}
+	var lsResult string
+	lsResp, lsErr := client.APICall(lsReq)
+	if lsErr != nil {
+		lsResult = fmt.Sprintf("(ls error: %v)", lsErr)
+	} else {
+		lsResult = string(lsResp)
+	}
+	log.Printf("[DEBUG] installPKCS12: F5 ls result: %s", lsResult)
 
 	log.Printf("[DEBUG] installPKCS12: running install from %s", localFilePath)
 
@@ -143,7 +165,8 @@ func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, 
 		ContentType: "application/json",
 	}
 	if _, err := client.APICall(apiReq); err != nil {
-		return fmt.Errorf("error running PKCS12 install command for %s: %w", name, err)
+		return fmt.Errorf("error running PKCS12 install command for %s: %w\nupload response: %s\nls %s: %s",
+			name, err, uploadBody, localFilePath, lsResult)
 	}
 	return nil
 }
@@ -232,12 +255,19 @@ func resourceBigipSSLPKCS12Create(ctx context.Context, d *schema.ResourceData, m
 	p12B64 := d.Get("p12_content_wo").(string)
 	passphrase := d.Get("passphrase_wo").(string)
 
+	if p12B64 == "" {
+		return diag.FromErr(fmt.Errorf("p12_content_wo is empty — write-only value was not provided to the provider during create"))
+	}
+
 	p12Bytes, err := base64.StdEncoding.DecodeString(p12B64)
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error decoding p12_content_wo as base64: %w", err))
 	}
+	if len(p12Bytes) == 0 {
+		return diag.FromErr(fmt.Errorf("p12_content_wo decoded to 0 bytes (base64 input length: %d)", len(p12B64)))
+	}
 
-	log.Printf("[INFO] Installing PKCS12 bundle as /%s/%s on BIG-IP", partition, name)
+	log.Printf("[INFO] Installing PKCS12 bundle as /%s/%s on BIG-IP (%d bytes)", partition, name, len(p12Bytes))
 	if err := installPKCS12(client, name, partition, p12Bytes, passphrase); err != nil {
 		return diag.FromErr(err)
 	}
