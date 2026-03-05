@@ -28,7 +28,7 @@ type pkcs12InstallRequest struct {
 // The key will be stored passphrase-protected when passphrase is non-empty.
 // After installation BIG-IP creates <partition>/<name>.crt and <partition>/<name>.key.
 func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, passphrase string) error {
-	filename := name + ".p12"
+	filename := name + ".crt"
 	if _, err := client.UploadBytes(p12Data, filename); err != nil {
 		return fmt.Errorf("error uploading PKCS12 file %s: %w", filename, err)
 	}
