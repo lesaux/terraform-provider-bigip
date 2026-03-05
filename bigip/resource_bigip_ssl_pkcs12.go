@@ -252,8 +252,18 @@ func resourceBigipSSLPKCS12Create(ctx context.Context, d *schema.ResourceData, m
 
 	name := d.Get("name").(string)
 	partition := d.Get("partition").(string)
-	p12B64 := d.Get("p12_content_wo").(string)
-	passphrase := d.Get("passphrase_wo").(string)
+
+	// WriteOnly attributes are not populated into ResourceData by the SDK.
+	// They are only available via GetRawConfig() as cty values.
+	rawCfg := d.GetRawConfig()
+	var p12B64 string
+	if p12Val := rawCfg.GetAttr("p12_content_wo"); !p12Val.IsNull() && p12Val.IsKnown() {
+		p12B64 = p12Val.AsString()
+	}
+	var passphrase string
+	if ppVal := rawCfg.GetAttr("passphrase_wo"); !ppVal.IsNull() && ppVal.IsKnown() {
+		passphrase = ppVal.AsString()
+	}
 
 	if p12B64 == "" {
 		return diag.FromErr(fmt.Errorf("p12_content_wo is empty — write-only value was not provided to the provider during create"))
@@ -345,8 +355,17 @@ func resourceBigipSSLPKCS12Update(ctx context.Context, d *schema.ResourceData, m
 	partition := d.Get("partition").(string)
 
 	if d.HasChange("p12_content_wo_version") || d.HasChange("passphrase_wo_version") {
-		p12B64 := d.Get("p12_content_wo").(string)
-		passphrase := d.Get("passphrase_wo").(string)
+		// WriteOnly attributes are not populated into ResourceData by the SDK.
+		// They are only available via GetRawConfig() as cty values.
+		rawCfg := d.GetRawConfig()
+		var p12B64 string
+		if p12Val := rawCfg.GetAttr("p12_content_wo"); !p12Val.IsNull() && p12Val.IsKnown() {
+			p12B64 = p12Val.AsString()
+		}
+		var passphrase string
+		if ppVal := rawCfg.GetAttr("passphrase_wo"); !ppVal.IsNull() && ppVal.IsKnown() {
+			passphrase = ppVal.AsString()
+		}
 
 		p12Bytes, err := base64.StdEncoding.DecodeString(p12B64)
 		if err != nil {
