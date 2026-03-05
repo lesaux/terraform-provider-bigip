@@ -254,5 +254,3 @@ func TestAccBigipSslKeyWriteOnlyConflict(t *testing.T) {
 		},
 	})
 }
-
-

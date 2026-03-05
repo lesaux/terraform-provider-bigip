@@ -43,6 +43,7 @@ resource "bigip_ssl_pkcs12" "test" {
   passphrase_wo_version  = "1"
 }
 `
+
 // testResourceSSLPKCS12IssuerBase is the baseline config without issuer_cert.
 var testResourceSSLPKCS12IssuerBase = `
 resource "bigip_ssl_pkcs12" "test_issuer" {

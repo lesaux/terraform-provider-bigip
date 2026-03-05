@@ -36,5 +36,3 @@ func TestAccBigipCommand_run(t *testing.T) {
 		},
 	})
 }
-
-

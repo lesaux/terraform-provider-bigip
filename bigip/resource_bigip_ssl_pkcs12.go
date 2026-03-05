@@ -29,9 +29,21 @@ type pkcs12InstallRequest struct {
 // After installation BIG-IP creates <partition>/<name>.crt and <partition>/<name>.key.
 func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, passphrase string) error {
 	filename := name + ".crt"
-	if _, err := client.UploadBytes(p12Data, filename); err != nil {
-		return fmt.Errorf("error uploading PKCS12 file %s: %w", filename, err)
+
+	b64Data := base64.StdEncoding.EncodeToString(p12Data)
+	cmdArgs := fmt.Sprintf("-c \"echo %s | base64 -d > %s/%s\"", b64Data, restDownloadPath, filename)
+
+	cmdReq := &bigip.BigipCommand{
+		Command:     "run",
+		UtilCmdArgs: cmdArgs,
 	}
+
+	var cmdResp bigip.BigipCommand
+	_, err := client.RunCommand(cmdReq)
+	if err != nil {
+		return fmt.Errorf("error uploading PKCS12 file %s via bash base64: %w", filename, err)
+	}
+	_ = cmdResp
 
 	req := &pkcs12InstallRequest{
 		Command:       "install",
