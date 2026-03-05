@@ -50,7 +50,7 @@ func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, 
 		chunk := b64Data[i:end]
 		cmdReq := &bigip.BigipCommand{
 			Command:     "run",
-			UtilCmdArgs: fmt.Sprintf("-c \"echo -n '%s' >> %s/%s\"", chunk, restDownloadPath, b64Filename),
+			UtilCmdArgs: fmt.Sprintf("-c \"printf '%%s' '%s' >> %s/%s\"", chunk, restDownloadPath, b64Filename),
 		}
 		if _, err := client.RunCommand(cmdReq); err != nil {
 			return fmt.Errorf("error writing base64 chunk to %s: %w", b64Filename, err)
@@ -60,7 +60,7 @@ func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, 
 	// 3. Decode the appended base64 file to the target cert file
 	cmdReq := &bigip.BigipCommand{
 		Command:     "run",
-		UtilCmdArgs: fmt.Sprintf("-c \"base64 -d %s/%s > %s/%s\"", restDownloadPath, b64Filename, restDownloadPath, filename),
+		UtilCmdArgs: fmt.Sprintf("-c \"fold -w 76 %s/%s | base64 -d > %s/%s\"", restDownloadPath, b64Filename, restDownloadPath, filename),
 	}
 	if _, err := client.RunCommand(cmdReq); err != nil {
 		return fmt.Errorf("error decoding complete base64 file %s: %w", filename, err)
