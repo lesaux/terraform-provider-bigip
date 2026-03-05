@@ -36,7 +36,7 @@ func resourceBigipCommand() *schema.Resource {
 			},
 			"commands": {
 				Type:     schema.TypeList,
-				Required: true,
+				Optional: true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
@@ -59,12 +59,10 @@ func resourceBigipCommandCreate(ctx context.Context, d *schema.ResourceData, met
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "apply" {
-		if m, ok := d.GetOk("commands"); ok {
-			for _, cmd := range m.([]interface{}) {
-				// Handle edge case where command contains our quote character
-				escapedCmd := strings.ReplaceAll(cmd.(string), "'", "'\\''")
-				commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", escapedCmd))
-			}
+		for _, cmd := range d.Get("commands").([]interface{}) {
+			// Handle edge case where command contains our quote character
+			escapedCmd := strings.ReplaceAll(cmd.(string), "'", "'\\''")
+			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", escapedCmd))
 		}
 		log.Printf("[INFO] Running TMSH Command : %v ", commandList)
 		var resultList []string
@@ -113,10 +111,8 @@ func resourceBigipCommandUpdate(ctx context.Context, d *schema.ResourceData, met
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "apply" {
-		if m, ok := d.GetOk("commands"); ok {
-			for _, cmd := range m.([]interface{}) {
-				commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
-			}
+		for _, cmd := range d.Get("commands").([]interface{}) {
+			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
 		}
 		log.Printf("[INFO] Running TMSH Command : %v ", commandList)
 		var resultList []string
@@ -140,10 +136,8 @@ func resourceBigipCommandDelete(ctx context.Context, d *schema.ResourceData, met
 	client := meta.(*bigip.BigIP)
 	var commandList []string
 	if d.Get("when").(string) == "destroy" {
-		if m, ok := d.GetOk("commands"); ok {
-			for _, cmd := range m.([]interface{}) {
-				commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
-			}
+		for _, cmd := range d.Get("commands").([]interface{}) {
+			commandList = append(commandList, fmt.Sprintf("-c 'tmsh %s'", cmd.(string)))
 		}
 		log.Printf("[INFO] Running Delete TMSH Command: %v ", commandList)
 

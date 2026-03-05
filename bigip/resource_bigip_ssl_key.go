@@ -30,17 +30,30 @@ func resourceBigipSslKey() *schema.Resource {
 				ForceNew:    true,
 			},
 			"content": {
-				Type:      schema.TypeString,
-				Required:  true,
-				Sensitive: true,
-				//ForceNew:    true,
-				Description: "Content of SSL certificate key present on local Disk",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Sensitive:    true,
+				Description:  "Content of SSL certificate key present on local Disk",
+				ExactlyOneOf: []string{"content", "content_wo"},
 			},
-			"passphrase": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Sensitive:   true,
-				Description: "Passphrase on key.",
+			"content_wo": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Sensitive:    true,
+				WriteOnly:    true,
+				Description:  "Content of SSL certificate key present on local Disk - Write Only",
+				ExactlyOneOf: []string{"content", "content_wo"},
+				RequiredWith: []string{"content_wo_version"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("content_wo_version")
+				},
+			},
+			"content_wo_version": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      "",
+				Description:  "Version of Content of SSL certificate key present on local Disk - Write Only",
+				RequiredWith: []string{"content_wo"},
 			},
 			"partition": {
 				Type:         schema.TypeString,
@@ -64,12 +77,15 @@ func resourceBigipSslKeyCreate(ctx context.Context, d *schema.ResourceData, meta
 	name := d.Get("name").(string)
 	log.Println("[INFO] Certificate Key Name " + name)
 	certpath := d.Get("content").(string)
+	if certpath == "" {
+		if !d.GetRawConfig().GetAttr("content_wo").IsNull() && d.GetRawConfig().GetAttr("content_wo").IsKnown() {
+			certpath = d.GetRawConfig().GetAttr("content_wo").AsString()
+		}
+	}
+	if certpath == "" {
+		return diag.Errorf("key content is empty for %s: neither 'content' nor 'content_wo' provided a value — check that the private key is being passed correctly from Vault", name)
+	}
 	partition := d.Get("partition").(string)
-	passPhrase := d.Get("passphrase").(string)
-	/*if !strings.HasSuffix(name, ".key") {
-		name = name + ".key"
-	}*/
-
 	sourcePath, err := client.UploadKey(name, certpath)
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error in Uploading certificate key (%s): %s", name, err))
@@ -78,7 +94,6 @@ func resourceBigipSslKeyCreate(ctx context.Context, d *schema.ResourceData, meta
 		Name:       name,
 		SourcePath: sourcePath,
 		Partition:  partition,
-		Passphrase: passPhrase,
 	}
 	log.Printf("[DEBUG] certkey: %+v\n", certkey)
 	err = client.AddKey(&certkey)
@@ -126,21 +141,38 @@ func resourceBigipSslKeyUpdate(ctx context.Context, d *schema.ResourceData, meta
 	name := d.Id()
 	log.Println("[INFO] Certificate key Name " + name)
 	certpath := d.Get("content").(string)
+	if certpath == "" {
+		// content_wo is write-only (never stored in state), so d.HasChange("content_wo")
+		// always returns true when the field is configured. Use the version field instead,
+		// which IS stored in state and is the user-controlled signal for "key changed".
+		if d.HasChange("content_wo_version") {
+			if !d.GetRawConfig().GetAttr("content_wo").IsNull() && d.GetRawConfig().GetAttr("content_wo").IsKnown() {
+				certpath = d.GetRawConfig().GetAttr("content_wo").AsString()
+			}
+		}
+	} else {
+		if !d.HasChange("content") {
+			certpath = ""
+		}
+	}
 	/*if !strings.HasSuffix(name, ".key") {
 		name = name + ".key"
 	}*/
 	partition := d.Get("partition").(string)
-	passPhrase := d.Get("passphrase").(string)
 
-	sourcePath, err := client.UploadKey(name, certpath)
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("error in Uploading certificate key (%s): %s", name, err))
+	var sourcePath string
+	var err error
+	if certpath != "" {
+		sourcePath, err = client.UploadKey(name, certpath)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error in Uploading certificate key (%s): %s", name, err))
+		}
 	}
+
 	certkey := bigip.Key{
 		Name:       name,
 		SourcePath: sourcePath,
 		Partition:  partition,
-		Passphrase: passPhrase,
 	}
 	keyName := fmt.Sprintf("/%s/%s", partition, name)
 	err = client.ModifyKey(keyName, &certkey)

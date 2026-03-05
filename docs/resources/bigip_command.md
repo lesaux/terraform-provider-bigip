@@ -51,9 +51,30 @@ resource "bigip_command" "hello-world" {
 }
 ```
 
+### Usage with Write-Only Commands
+
+Use `commands_wo` when the command string contains sensitive or ephemeral values (e.g. certificate names derived from ephemeral resources) that should not be stored in the Terraform state file.
+
+```hcl
+resource "bigip_command" "update-ssl-profile" {
+  commands_wo = [
+    "modify ltm profile client-ssl /Common/my-ssl-profile cert /Common/mycert.crt key /Common/mycert.key"
+  ]
+  # Change this value whenever the commands change to trigger re-execution.
+  # Use a non-ephemeral signal such as md5() of a plain input variable or
+  # a resource attribute stored in state.
+  commands_wo_version = var.cert_version
+}
+```
+
 ## Argument Reference
 
-* `commands` - (Required) The commands to send to the remote BIG-IP device over the configured provider. The resulting output from the command is returned and added to `command_result`
+* `commands` - (Optional) The commands to send to the remote BIG-IP device over the configured provider. The resulting output from the command is returned and added to `command_result`. Exactly one of `commands` or `commands_wo` must be specified.
+
+* `commands_wo` - (Optional) The commands to send to the remote BIG-IP device. This attribute is write-only and will not be stored in the state file. Use this instead of `commands` when the command string contains sensitive or ephemeral values. Exactly one of `commands` or `commands_wo` must be specified.
+
+* `commands_wo_version` - (Optional) Version token for `commands_wo`. Change this value to trigger re-execution when the write-only commands change. Required when `commands_wo` is set.
+
 * `when` - (Optional, possible values: `apply` or `destroy`) default value will be `apply`,can be set to `destroy` for terraform destroy call.
 
 ## Attributes Reference

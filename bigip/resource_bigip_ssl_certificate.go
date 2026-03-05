@@ -33,11 +33,30 @@ func resourceBigipSslCertificate() *schema.Resource {
 				ForceNew:    true,
 			},
 			"content": {
-				Type:      schema.TypeString,
-				Required:  true,
-				Sensitive: true,
-				//ForceNew:    true,
-				Description: "Content of certificate on Disk",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Sensitive:    true,
+				Description:  "Content of certificate on Disk",
+				ExactlyOneOf: []string{"content", "content_wo"},
+			},
+			"content_wo": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Sensitive:    true,
+				WriteOnly:    true,
+				Description:  "Content of certificate on Disk - Write Only",
+				ExactlyOneOf: []string{"content", "content_wo"},
+				RequiredWith: []string{"content_wo_version"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("content_wo_version")
+				},
+			},
+			"content_wo_version": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      "",
+				Description:  "Version of Content of certificate on Disk - Write Only",
+				RequiredWith: []string{"content_wo"},
 			},
 			"partition": {
 				Type:         schema.TypeString,
@@ -77,6 +96,11 @@ func resourceBigipSslCertificateCreate(ctx context.Context, d *schema.ResourceDa
 	log.Println("[INFO] Certificate Name " + name)
 
 	certPath := d.Get("content").(string)
+	if certPath == "" {
+		if !d.GetRawConfig().GetAttr("content_wo").IsNull() && d.GetRawConfig().GetAttr("content_wo").IsKnown() {
+			certPath = d.GetRawConfig().GetAttr("content_wo").AsString()
+		}
+	}
 	partition := d.Get("partition").(string)
 	cert := &bigip.Certificate{
 		Name:      name,
@@ -170,6 +194,20 @@ func resourceBigipSslCertificateUpdate(ctx context.Context, d *schema.ResourceDa
 	name := d.Id()
 	log.Println("[INFO] Certificate Name " + name)
 	certpath := d.Get("content").(string)
+	if certpath == "" {
+		// content_wo is write-only (never stored in state), so d.HasChange("content_wo")
+		// always returns true when the field is configured. Use the version field instead,
+		// which IS stored in state and is the user-controlled signal for "certificate changed".
+		if d.HasChange("content_wo_version") {
+			if !d.GetRawConfig().GetAttr("content_wo").IsNull() && d.GetRawConfig().GetAttr("content_wo").IsKnown() {
+				certpath = d.GetRawConfig().GetAttr("content_wo").AsString()
+			}
+		}
+	} else {
+		if !d.HasChange("content") {
+			certpath = ""
+		}
+	}
 	partition := d.Get("partition").(string)
 
 	cert := &bigip.Certificate{
@@ -190,9 +228,19 @@ func resourceBigipSslCertificateUpdate(ctx context.Context, d *schema.ResourceDa
 		cert.CertValidatorRef = certValidRef
 	}
 
-	err := client.UpdateCertificate(certpath, cert)
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("error in Importing certificate (%s): %s", name, err))
+	if certpath != "" {
+		// Content changed: upload new certificate bytes and update metadata in one call.
+		err := client.UpdateCertificate(certpath, cert)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error in Importing certificate (%s): %s", name, err))
+		}
+	} else if d.HasChange("monitoring_type") || d.HasChange("issuer_cert") || d.HasChange("ocsp") {
+		// Metadata-only change: patch certificate properties without re-uploading content.
+		certName := fmt.Sprintf("/%s/%s", partition, name)
+		err := client.ModifyCertificate(certName, cert)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error updating certificate metadata (%s): %s", name, err))
+		}
 	}
 
 	return resourceBigipSslCertificateRead(ctx, d, meta)

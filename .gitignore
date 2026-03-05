@@ -57,3 +57,4 @@ examples1
 # Keep windows files with windows line endings
 *.winfile eol=crlf
 build
+vendor
