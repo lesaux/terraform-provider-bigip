@@ -30,20 +30,47 @@ type pkcs12InstallRequest struct {
 func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, passphrase string) error {
 	filename := name + ".crt"
 
-	b64Data := base64.StdEncoding.EncodeToString(p12Data)
-	cmdArgs := fmt.Sprintf("-c \"echo %s | base64 -d > %s/%s\"", b64Data, restDownloadPath, filename)
+	log.Printf("[DEBUG] installPKCS12: p12Data size=%d", len(p12Data))
 
+	// 1. Delete any leftover temp b64 file
+	b64Filename := filename + ".b64"
+	client.RunCommand(&bigip.BigipCommand{
+		Command:     "run",
+		UtilCmdArgs: fmt.Sprintf("-c \"rm -f %s/%s\"", restDownloadPath, b64Filename),
+	})
+
+	// 2. Upload Base64 representation in chunks
+	b64Data := base64.StdEncoding.EncodeToString(p12Data)
+	chunkSize := 1024
+	for i := 0; i < len(b64Data); i += chunkSize {
+		end := i + chunkSize
+		if end > len(b64Data) {
+			end = len(b64Data)
+		}
+		chunk := b64Data[i:end]
+		cmdReq := &bigip.BigipCommand{
+			Command:     "run",
+			UtilCmdArgs: fmt.Sprintf("-c \"echo -n '%s' >> %s/%s\"", chunk, restDownloadPath, b64Filename),
+		}
+		if _, err := client.RunCommand(cmdReq); err != nil {
+			return fmt.Errorf("error writing base64 chunk to %s: %w", b64Filename, err)
+		}
+	}
+
+	// 3. Decode the appended base64 file to the target cert file
 	cmdReq := &bigip.BigipCommand{
 		Command:     "run",
-		UtilCmdArgs: cmdArgs,
+		UtilCmdArgs: fmt.Sprintf("-c \"base64 -d %s/%s > %s/%s\"", restDownloadPath, b64Filename, restDownloadPath, filename),
+	}
+	if _, err := client.RunCommand(cmdReq); err != nil {
+		return fmt.Errorf("error decoding complete base64 file %s: %w", filename, err)
 	}
 
-	var cmdResp bigip.BigipCommand
-	_, err := client.RunCommand(cmdReq)
-	if err != nil {
-		return fmt.Errorf("error uploading PKCS12 file %s via bash base64: %w", filename, err)
-	}
-	_ = cmdResp
+	// 4. Cleanup the temp base64 file
+	client.RunCommand(&bigip.BigipCommand{
+		Command:     "run",
+		UtilCmdArgs: fmt.Sprintf("-c \"rm -f %s/%s\"", restDownloadPath, b64Filename),
+	})
 
 	req := &pkcs12InstallRequest{
 		Command:       "install",

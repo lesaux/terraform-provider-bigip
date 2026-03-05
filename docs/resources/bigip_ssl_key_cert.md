@@ -38,7 +38,7 @@ ephemeral "tls_private_key" "example" {
 ephemeral "tls_self_signed_cert" "example" {
   key_algorithm   = "RSA"
   private_key_pem = ephemeral.tls_private_key.example.private_key_pem
-  
+
   subject {
     common_name  = "example.com"
     organization = "ACME Examples, Inc"
@@ -58,7 +58,7 @@ resource "bigip_ssl_key_cert" "example" {
   key_name                = "example.key"
   key_content_wo          = ephemeral.tls_private_key.example.private_key_pem
   key_content_wo_version  = 1
-  
+
   cert_name               = "example.crt"
   cert_content_wo         = ephemeral.tls_self_signed_cert.example.cert_pem
   cert_content_wo_version = 1
