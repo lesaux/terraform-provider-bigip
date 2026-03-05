@@ -529,7 +529,7 @@ func (b *BigIP) Upload(r io.Reader, size int64, path ...string) (*Upload, error)
 		// Read next chunk
 		chunk := make([]byte, chunkSize)
 		n, err := r.Read(chunk)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return nil, err
 		}
 		end = start + int64(n)
@@ -576,9 +576,9 @@ func (b *BigIP) Upload(r io.Reader, size int64, path ...string) (*Upload, error)
 			return nil, err
 		}
 		start = end
-		if start >= size {
+		if start >= size || err == io.EOF {
 			// Final chunk was uploaded
-			return &upload, err
+			return &upload, nil
 		}
 	}
 }

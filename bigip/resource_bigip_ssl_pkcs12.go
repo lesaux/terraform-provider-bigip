@@ -1,12 +1,16 @@
 package bigip
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strings"
+	"time"
 
 	bigip "github.com/f5devcentral/go-bigip"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -24,53 +28,79 @@ type pkcs12InstallRequest struct {
 	Passphrase    string `json:"passphrase,omitempty"`
 }
 
+// uploadP12File uploads raw PKCS12 bytes to the BIG-IP file-transfer endpoint
+// using plain byte-slice chunking with Content-Range headers.
+//
+// This avoids go-bigip's Upload/UploadBytes helper which uses io.Reader.Read()
+// and historically treated (n, io.EOF) — the normal "last chunk" response from
+// bytes.NewReader — as a fatal error. By slicing []byte directly we never touch
+// io.Reader and the EOF problem cannot occur.
+//
+// The approach mirrors the working F5 Ansible bigip_ssl_pkcs12 module:
+//   POST /mgmt/shared/file-transfer/uploads/<filename>
+//   Content-Type:  application/octet-stream
+//   Content-Range: start-(end-1)/total
+func uploadP12File(client *bigip.BigIP, data []byte, filename string) error {
+	const chunkSize = 512 * 1024 // 512 KiB — same as go-bigip default
+
+	size := int64(len(data))
+	uploadURL := fmt.Sprintf("%s/mgmt/shared/file-transfer/uploads/%s", client.Host, filename)
+
+	timeout := 60 * time.Second
+	if client.ConfigOptions != nil && client.ConfigOptions.APICallTimeout > 0 {
+		timeout = client.ConfigOptions.APICallTimeout
+	}
+	httpClient := &http.Client{
+		Transport: client.Transport,
+		Timeout:   timeout,
+	}
+
+	for start := int64(0); start < size; {
+		end := start + chunkSize
+		if end > size {
+			end = size
+		}
+
+		req, err := http.NewRequest("POST", uploadURL, bytes.NewReader(data[start:end]))
+		if err != nil {
+			return fmt.Errorf("error creating upload request for chunk %d-%d: %w", start, end-1, err)
+		}
+		if client.Token != "" {
+			req.Header.Set("X-F5-Auth-Token", client.Token)
+		} else {
+			req.SetBasicAuth(client.User, client.Password)
+		}
+		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("Content-Range", fmt.Sprintf("%d-%d/%d", start, end-1, size))
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("error uploading PKCS12 chunk %d-%d: %w", start, end-1, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			return fmt.Errorf("BIG-IP returned HTTP %d for chunk %d-%d: %s", resp.StatusCode, start, end-1, string(body))
+		}
+
+		log.Printf("[DEBUG] uploadP12File: uploaded bytes %d-%d/%d", start, end-1, size)
+		start = end
+	}
+	return nil
+}
+
 // installPKCS12 uploads raw PKCS12 bytes to BIG-IP and runs the install command.
-// The key will be stored passphrase-protected when passphrase is non-empty.
-// After installation BIG-IP creates <partition>/<name>.crt and <partition>/<name>.key.
+// This mirrors what the F5 Ansible bigip_ssl_pkcs12 module does:
+// 1. Upload the raw binary .p12 via the file-transfer REST endpoint.
+// 2. POST to sys/crypto/pkcs12 to install it from the uploaded local file.
 func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, passphrase string) error {
-	filename := name + ".crt"
+	filename := name + ".p12"
 
-	log.Printf("[DEBUG] installPKCS12: p12Data size=%d", len(p12Data))
+	log.Printf("[DEBUG] installPKCS12: uploading %s (%d bytes)", filename, len(p12Data))
 
-	// 1. Delete any leftover temp b64 file
-	b64Filename := filename + ".b64"
-	client.RunCommand(&bigip.BigipCommand{
-		Command:     "run",
-		UtilCmdArgs: fmt.Sprintf("-c \"rm -f %s/%s\"", restDownloadPath, b64Filename),
-	})
-
-	// 2. Upload Base64 representation in chunks
-	b64Data := base64.StdEncoding.EncodeToString(p12Data)
-	chunkSize := 1024
-	for i := 0; i < len(b64Data); i += chunkSize {
-		end := i + chunkSize
-		if end > len(b64Data) {
-			end = len(b64Data)
-		}
-		chunk := b64Data[i:end]
-		cmdReq := &bigip.BigipCommand{
-			Command:     "run",
-			UtilCmdArgs: fmt.Sprintf("-c \"printf '%%s' '%s' >> %s/%s\"", chunk, restDownloadPath, b64Filename),
-		}
-		if _, err := client.RunCommand(cmdReq); err != nil {
-			return fmt.Errorf("error writing base64 chunk to %s: %w", b64Filename, err)
-		}
+	if err := uploadP12File(client, p12Data, filename); err != nil {
+		return fmt.Errorf("error uploading PKCS12 file %s: %w", filename, err)
 	}
-
-	// 3. Decode the appended base64 file to the target cert file
-	cmdReq := &bigip.BigipCommand{
-		Command:     "run",
-		UtilCmdArgs: fmt.Sprintf("-c \"fold -w 76 %s/%s | base64 -d > %s/%s\"", restDownloadPath, b64Filename, restDownloadPath, filename),
-	}
-	if _, err := client.RunCommand(cmdReq); err != nil {
-		return fmt.Errorf("error decoding complete base64 file %s: %w", filename, err)
-	}
-
-	// 4. Cleanup the temp base64 file
-	client.RunCommand(&bigip.BigipCommand{
-		Command:     "run",
-		UtilCmdArgs: fmt.Sprintf("-c \"rm -f %s/%s\"", restDownloadPath, b64Filename),
-	})
 
 	req := &pkcs12InstallRequest{
 		Command:       "install",
