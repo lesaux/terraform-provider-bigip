@@ -114,10 +114,30 @@ func resourceBigipSSLKeyCert() *schema.Resource {
 				Description: "Specifies the OCSP responder",
 			},
 			"passphrase": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Sensitive:   true,
-				Description: "Passphrase on the key.",
+				Type:          schema.TypeString,
+				Optional:      true,
+				Sensitive:     true,
+				Description:   "Passphrase on the key.",
+				ConflictsWith: []string{"passphrase_wo"},
+			},
+			"passphrase_wo": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Sensitive:     true,
+				WriteOnly:     true,
+				Description:   "Passphrase on the key - Write Only",
+				ConflictsWith: []string{"passphrase"},
+				RequiredWith:  []string{"passphrase_wo_version"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("passphrase_wo_version")
+				},
+			},
+			"passphrase_wo_version": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      "",
+				Description:  "Version of the passphrase on the key - Write Only",
+				RequiredWith: []string{"passphrase_wo"},
 			},
 			"partition": {
 				Type:         schema.TypeString,
@@ -140,6 +160,9 @@ func resourceBigipSSLKeyCertCreate(ctx context.Context, d *schema.ResourceData, 
 	}
 	partition := d.Get("partition").(string)
 	passphrase := d.Get("passphrase").(string)
+	if passphrase == "" {
+		passphrase = d.Get("passphrase_wo").(string)
+	}
 	certName := d.Get("cert_name").(string)
 	certPath := d.Get("cert_content").(string)
 	if certPath == "" {
@@ -254,6 +277,9 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 	}
 	partition := d.Get("partition").(string)
 	passphrase := d.Get("passphrase").(string)
+	if passphrase == "" {
+		passphrase = d.Get("passphrase_wo").(string)
+	}
 	certName := d.Get("cert_name").(string)
 	certPath := ""
 	if d.HasChange("cert_content") {

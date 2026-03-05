@@ -420,6 +420,160 @@ func TestAccBigipSSLCertKeyWriteOnlyMetadataUpdate(t *testing.T) {
 	})
 }
 
+var testResourceSSLKeyCertPassphraseWO = `
+ephemeral "tls_private_key" "pp" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+ephemeral "tls_self_signed_cert" "pp" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.pp.private_key_pem
+  subject {
+    common_name  = "passphrase-test.example.com"
+    organization = "ACME Examples, Inc"
+  }
+  validity_period_hours = 12
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
+resource "bigip_ssl_key_cert" "testkeycert_pp" {
+  partition               = "Common"
+  key_name                = "ssl-test-key-pp"
+  key_content_wo          = ephemeral.tls_private_key.pp.private_key_pem
+  key_content_wo_version  = "1"
+  cert_name               = "ssl-test-cert-pp"
+  cert_content_wo         = ephemeral.tls_self_signed_cert.pp.cert_pem
+  cert_content_wo_version = "1"
+  passphrase_wo           = "supersecret"
+  passphrase_wo_version   = "1"
+}
+`
+
+var testResourceSSLKeyCertPassphraseWOUpdated = `
+ephemeral "tls_private_key" "pp" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+ephemeral "tls_self_signed_cert" "pp" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.pp.private_key_pem
+  subject {
+    common_name  = "passphrase-test.example.com"
+    organization = "ACME Examples, Inc"
+  }
+  validity_period_hours = 12
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
+resource "bigip_ssl_key_cert" "testkeycert_pp" {
+  partition               = "Common"
+  key_name                = "ssl-test-key-pp"
+  key_content_wo          = ephemeral.tls_private_key.pp.private_key_pem
+  key_content_wo_version  = "2"
+  cert_name               = "ssl-test-cert-pp"
+  cert_content_wo         = ephemeral.tls_self_signed_cert.pp.cert_pem
+  cert_content_wo_version = "2"
+  passphrase_wo           = "newsecret"
+  passphrase_wo_version   = "2"
+}
+`
+
+func TestAccBigipSSLCertKeyCreatePassphraseWO(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				Config: testResourceSSLKeyCertPassphraseWO,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "key_name", "ssl-test-key-pp"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "cert_name", "ssl-test-cert-pp"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "passphrase_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "key_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "cert_content_wo_version", "1"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "partition", "Common"),
+					// passphrase_wo is write-only — must not be in state
+					resource.TestCheckNoResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "passphrase_wo"),
+				),
+				Destroy: false,
+			},
+			{
+				// Idempotency check
+				Config:             testResourceSSLKeyCertPassphraseWO,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				// Update: bump versions + rotate passphrase
+				Config: testResourceSSLKeyCertPassphraseWOUpdated,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "passphrase_wo_version", "2"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "key_content_wo_version", "2"),
+					resource.TestCheckResourceAttr("bigip_ssl_key_cert.testkeycert_pp", "cert_content_wo_version", "2"),
+				),
+			},
+		},
+	})
+}
+
+var testResourceSSLKeyCertPassphraseConflict = `
+ephemeral "tls_private_key" "pp_conflict" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+ephemeral "tls_self_signed_cert" "pp_conflict" {
+  key_algorithm   = "RSA"
+  private_key_pem = ephemeral.tls_private_key.pp_conflict.private_key_pem
+  subject {
+    common_name  = "conflict-test.example.com"
+    organization = "ACME Examples, Inc"
+  }
+  validity_period_hours = 12
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+}
+
+resource "bigip_ssl_key_cert" "testkeycert_pp_conflict" {
+  partition               = "Common"
+  key_name                = "ssl-test-key-pp-conflict"
+  key_content_wo          = ephemeral.tls_private_key.pp_conflict.private_key_pem
+  key_content_wo_version  = "1"
+  cert_name               = "ssl-test-cert-pp-conflict"
+  cert_content_wo         = ephemeral.tls_self_signed_cert.pp_conflict.cert_pem
+  cert_content_wo_version = "1"
+  passphrase              = "plaintext"
+  passphrase_wo           = "supersecret"
+  passphrase_wo_version   = "1"
+}
+`
+
+func TestAccBigipSSLCertKeyPassphraseConflict(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAcctPreCheck(t)
+		},
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				Config:      testResourceSSLKeyCertPassphraseConflict,
+				ExpectError: regexp.MustCompile("conflicts with"),
+			},
+		},
+	})
+}
+
 var testResourceSSLKeyCertWOConflict = `
 ephemeral "tls_private_key" "wo" {
   algorithm = "RSA"
