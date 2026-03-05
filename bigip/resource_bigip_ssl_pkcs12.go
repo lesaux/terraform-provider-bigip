@@ -28,23 +28,31 @@ type pkcs12InstallRequest struct {
 	Passphrase    string `json:"passphrase,omitempty"`
 }
 
+// uploadResponse is the JSON body returned by /mgmt/shared/file-transfer/uploads on success.
+type uploadResponse struct {
+	LocalFilePath     string `json:"localFilePath"`
+	TemporaryFilePath string `json:"temporaryFilePath"`
+	RemainingByteCount int64 `json:"remainingByteCount"`
+	TotalByteCount    int64  `json:"totalByteCount"`
+}
+
 // uploadP12File uploads raw PKCS12 bytes to the BIG-IP file-transfer endpoint
 // using plain byte-slice chunking with Content-Range headers.
+//
+// Returns the localFilePath reported by BIG-IP in its upload response, which is
+// the path that must be passed to the sys/crypto/pkcs12 install command.
 //
 // This avoids go-bigip's Upload/UploadBytes helper which uses io.Reader.Read()
 // and historically treated (n, io.EOF) — the normal "last chunk" response from
 // bytes.NewReader — as a fatal error. By slicing []byte directly we never touch
 // io.Reader and the EOF problem cannot occur.
-//
-// The approach mirrors the working F5 Ansible bigip_ssl_pkcs12 module:
-//   POST /mgmt/shared/file-transfer/uploads/<filename>
-//   Content-Type:  application/octet-stream
-//   Content-Range: start-(end-1)/total
-func uploadP12File(client *bigip.BigIP, data []byte, filename string) error {
+func uploadP12File(client *bigip.BigIP, data []byte, filename string) (string, error) {
 	const chunkSize = 512 * 1024 // 512 KiB — same as go-bigip default
 
 	size := int64(len(data))
 	uploadURL := fmt.Sprintf("%s/mgmt/shared/file-transfer/uploads/%s", client.Host, filename)
+
+	log.Printf("[DEBUG] uploadP12File: uploading %d bytes to %s", size, uploadURL)
 
 	timeout := 60 * time.Second
 	if client.ConfigOptions != nil && client.ConfigOptions.APICallTimeout > 0 {
@@ -55,6 +63,7 @@ func uploadP12File(client *bigip.BigIP, data []byte, filename string) error {
 		Timeout:   timeout,
 	}
 
+	var lastBody []byte
 	for start := int64(0); start < size; {
 		end := start + chunkSize
 		if end > size {
@@ -63,7 +72,7 @@ func uploadP12File(client *bigip.BigIP, data []byte, filename string) error {
 
 		req, err := http.NewRequest("POST", uploadURL, bytes.NewReader(data[start:end]))
 		if err != nil {
-			return fmt.Errorf("error creating upload request for chunk %d-%d: %w", start, end-1, err)
+			return "", fmt.Errorf("error creating upload request for chunk %d-%d: %w", start, end-1, err)
 		}
 		if client.Token != "" {
 			req.Header.Set("X-F5-Auth-Token", client.Token)
@@ -75,18 +84,28 @@ func uploadP12File(client *bigip.BigIP, data []byte, filename string) error {
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			return fmt.Errorf("error uploading PKCS12 chunk %d-%d: %w", start, end-1, err)
+			return "", fmt.Errorf("error uploading PKCS12 chunk %d-%d: %w", start, end-1, err)
 		}
-		body, _ := io.ReadAll(resp.Body)
+		lastBody, _ = io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode >= 400 {
-			return fmt.Errorf("BIG-IP returned HTTP %d for chunk %d-%d: %s", resp.StatusCode, start, end-1, string(body))
+			return "", fmt.Errorf("BIG-IP returned HTTP %d for chunk %d-%d: %s", resp.StatusCode, start, end-1, string(lastBody))
 		}
 
-		log.Printf("[DEBUG] uploadP12File: uploaded bytes %d-%d/%d", start, end-1, size)
+		log.Printf("[DEBUG] uploadP12File: uploaded bytes %d-%d/%d, response: %s", start, end-1, size, string(lastBody))
 		start = end
 	}
-	return nil
+
+	// Parse the final response to get the path where BIG-IP stored the file.
+	var uploadResp uploadResponse
+	if err := json.Unmarshal(lastBody, &uploadResp); err != nil || uploadResp.LocalFilePath == "" {
+		// Fall back to the well-known default path if the response can't be parsed.
+		fallback := restDownloadPath + "/" + filename
+		log.Printf("[DEBUG] uploadP12File: could not parse localFilePath from response (%v), using fallback: %s", err, fallback)
+		return fallback, nil
+	}
+	log.Printf("[DEBUG] uploadP12File: F5 localFilePath = %s", uploadResp.LocalFilePath)
+	return uploadResp.LocalFilePath, nil
 }
 
 // installPKCS12 uploads raw PKCS12 bytes to BIG-IP and runs the install command.
@@ -98,15 +117,18 @@ func installPKCS12(client *bigip.BigIP, name, partition string, p12Data []byte, 
 
 	log.Printf("[DEBUG] installPKCS12: uploading %s (%d bytes)", filename, len(p12Data))
 
-	if err := uploadP12File(client, p12Data, filename); err != nil {
+	localFilePath, err := uploadP12File(client, p12Data, filename)
+	if err != nil {
 		return fmt.Errorf("error uploading PKCS12 file %s: %w", filename, err)
 	}
+
+	log.Printf("[DEBUG] installPKCS12: running install from %s", localFilePath)
 
 	req := &pkcs12InstallRequest{
 		Command:       "install",
 		Name:          name,
 		Partition:     partition,
-		FromLocalFile: restDownloadPath + "/" + filename,
+		FromLocalFile: localFilePath,
 		Passphrase:    passphrase,
 	}
 	body, err := json.Marshal(req)
