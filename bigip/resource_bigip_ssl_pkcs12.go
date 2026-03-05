@@ -82,21 +82,19 @@ func resourceBigipSSLPKCS12() *schema.Resource {
 				ValidateFunc: validatePartitionName,
 			},
 			"p12_content_wo": {
-				Type:         schema.TypeString,
-				Required:     true,
-				Sensitive:    true,
-				WriteOnly:    true,
-				Description:  "Base64-encoded PKCS12 bundle (certificate + key) - Write Only.",
-				RequiredWith: []string{"p12_content_wo_version"},
+				Type:        schema.TypeString,
+				Required:    true,
+				Sensitive:   true,
+				WriteOnly:   true,
+				Description: "Base64-encoded PKCS12 bundle (certificate + key) - Write Only.",
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					return !d.HasChange("p12_content_wo_version")
 				},
 			},
 			"p12_content_wo_version": {
-				Type:         schema.TypeString,
-				Required:     true,
-				Description:  "Version of the PKCS12 bundle. Increment to trigger re-import.",
-				RequiredWith: []string{"p12_content_wo"},
+				Type:        schema.TypeString,
+				Required:    true,
+				Description: "Version of the PKCS12 bundle. Increment to trigger re-import.",
 			},
 			"passphrase_wo": {
 				Type:         schema.TypeString,
