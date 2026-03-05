@@ -283,14 +283,23 @@ func resourceBigipSSLPKCS12Create(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	if val, ok := d.GetOk("issuer_cert"); ok {
-		certFullPath := fmt.Sprintf("/%s/%s.crt", partition, name)
+		certFullPath := fmt.Sprintf("/%s/%s", partition, name)
 		cert := &bigip.Certificate{
-			Name:       name + ".crt",
-			Partition:  partition,
+			Name:      name,
+			Partition: partition,
 			IssuerCert: val.(string),
 		}
-		if err := client.ModifyCertificate(certFullPath, cert); err != nil {
-			return diag.FromErr(fmt.Errorf("error setting issuer_cert on %s: %w", certFullPath, err))
+		// F5 indexes the installed cert asynchronously; retry for up to 30s.
+		var issuerErr error
+		for attempt := 0; attempt < 15; attempt++ {
+			if issuerErr = client.ModifyCertificate(certFullPath, cert); issuerErr == nil {
+				break
+			}
+			log.Printf("[WARN] issuer_cert set attempt %d/15 failed for %s: %v — retrying in 2s", attempt+1, certFullPath, issuerErr)
+			time.Sleep(2 * time.Second)
+		}
+		if issuerErr != nil {
+			return diag.FromErr(fmt.Errorf("error setting issuer_cert on %s after retries: %w", certFullPath, issuerErr))
 		}
 	}
 
@@ -317,8 +326,8 @@ func resourceBigipSSLPKCS12Read(ctx context.Context, d *schema.ResourceData, met
 		_ = d.Set("partition", partition)
 	}
 
-	certFullPath := fmt.Sprintf("/%s/%s.crt", partition, name)
-	keyFullPath := fmt.Sprintf("/%s/%s.key", partition, name)
+	certFullPath := fmt.Sprintf("/%s/%s", partition, name)
+	keyFullPath := fmt.Sprintf("/%s/%s", partition, name)
 
 	cert, err := client.GetCertificate(certFullPath)
 	if err != nil {
@@ -379,9 +388,9 @@ func resourceBigipSSLPKCS12Update(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	if d.HasChange("issuer_cert") {
-		certFullPath := fmt.Sprintf("/%s/%s.crt", partition, name)
+		certFullPath := fmt.Sprintf("/%s/%s", partition, name)
 		cert := &bigip.Certificate{
-			Name:      name + ".crt",
+			Name:      name,
 			Partition: partition,
 		}
 		if val, ok := d.GetOk("issuer_cert"); ok {
@@ -400,8 +409,8 @@ func resourceBigipSSLPKCS12Delete(ctx context.Context, d *schema.ResourceData, m
 
 	name := d.Get("name").(string)
 	partition := d.Get("partition").(string)
-	keyFullPath := fmt.Sprintf("/%s/%s.key", partition, name)
-	certFullPath := fmt.Sprintf("/%s/%s.crt", partition, name)
+	keyFullPath := fmt.Sprintf("/%s/%s", partition, name)
+	certFullPath := fmt.Sprintf("/%s/%s", partition, name)
 
 	log.Printf("[INFO] Deleting PKCS12 key %s and certificate %s", keyFullPath, certFullPath)
 

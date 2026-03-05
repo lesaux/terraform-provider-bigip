@@ -154,25 +154,35 @@ func resourceBigipSSLKeyCertCreate(ctx context.Context, d *schema.ResourceData, 
 	client := meta.(*bigip.BigIP)
 
 	keyName := d.Get("key_name").(string)
+	partition := d.Get("partition").(string)
+	certName := d.Get("cert_name").(string)
+
+	// WriteOnly attributes are not populated into ResourceData by the SDK; read from raw config.
+	rawCfg := d.GetRawConfig()
 	keyPath := d.Get("key_content").(string)
 	if keyPath == "" {
-		keyPath = d.Get("key_content_wo").(string)
+		if v := rawCfg.GetAttr("key_content_wo"); !v.IsNull() && v.IsKnown() {
+			keyPath = v.AsString()
+		}
 	}
-	partition := d.Get("partition").(string)
 	passphrase := d.Get("passphrase").(string)
 	if passphrase == "" {
-		passphrase = d.Get("passphrase_wo").(string)
+		if v := rawCfg.GetAttr("passphrase_wo"); !v.IsNull() && v.IsKnown() {
+			passphrase = v.AsString()
+		}
 	}
-	certName := d.Get("cert_name").(string)
 	certPath := d.Get("cert_content").(string)
 	if certPath == "" {
-		certPath = d.Get("cert_content_wo").(string)
+		if v := rawCfg.GetAttr("cert_content_wo"); !v.IsNull() && v.IsKnown() {
+			certPath = v.AsString()
+		}
 	}
 
-	sourcePath, err := client.UploadKey(keyName, keyPath)
+	keyLocalPath, _, err := uploadP12File(client, []byte(keyPath), keyName)
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error while uploading the ssl key: %v", err))
 	}
+	sourcePath := "file://" + keyLocalPath
 
 	keyCfg := bigip.Key{
 		Name:       keyName,
@@ -198,15 +208,35 @@ func resourceBigipSSLKeyCertCreate(ctx context.Context, d *schema.ResourceData, 
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error while starting transaction: %v", err))
 	}
-	err = client.AddKey(&keyCfg)
+
+	keyFullPath := fmt.Sprintf("/%s/%s", partition, keyName)
+	existingKey, _ := client.GetKey(keyFullPath)
+	if existingKey != nil {
+		err = client.ModifyKey(keyFullPath, &keyCfg)
+	} else {
+		err = client.AddKey(&keyCfg)
+	}
 	if err != nil {
-		return diag.FromErr(fmt.Errorf("error while adding the ssl key: %v", err))
+		return diag.FromErr(fmt.Errorf("error while saving the ssl key %s: %v", keyFullPath, err))
 	}
 
-	err = client.UploadCertificate(certPath, cert)
+	certLocalPath, _, err := uploadP12File(client, []byte(certPath), certName)
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error while uploading the ssl cert: %v", err))
 	}
+	cert.SourcePath = "file://" + certLocalPath
+	
+	certFullPath := fmt.Sprintf("/%s/%s", partition, certName)
+	existingCert, _ := client.GetCertificate(certFullPath)
+	if existingCert != nil {
+		err = client.ModifyCertificate(certFullPath, cert)
+	} else {
+		err = client.AddCertificate(cert)
+	}
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("error while saving the ssl cert %s: %v", certFullPath, err))
+	}
+	
 	err = client.CommitTransaction(t.TransID)
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error while ending transaction: %d", err))
@@ -269,32 +299,42 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 	client := meta.(*bigip.BigIP)
 
 	keyName := d.Get("key_name").(string)
+	partition := d.Get("partition").(string)
+	certName := d.Get("cert_name").(string)
+
+	// WriteOnly attributes are not populated into ResourceData by the SDK; read from raw config.
+	rawCfg := d.GetRawConfig()
 	keyPath := ""
 	if d.HasChange("key_content") {
 		keyPath = d.Get("key_content").(string)
 	} else if d.HasChange("key_content_wo_version") {
-		keyPath = d.Get("key_content_wo").(string)
+		if v := rawCfg.GetAttr("key_content_wo"); !v.IsNull() && v.IsKnown() {
+			keyPath = v.AsString()
+		}
 	}
-	partition := d.Get("partition").(string)
 	passphrase := d.Get("passphrase").(string)
 	if passphrase == "" {
-		passphrase = d.Get("passphrase_wo").(string)
+		if v := rawCfg.GetAttr("passphrase_wo"); !v.IsNull() && v.IsKnown() {
+			passphrase = v.AsString()
+		}
 	}
-	certName := d.Get("cert_name").(string)
 	certPath := ""
 	if d.HasChange("cert_content") {
 		certPath = d.Get("cert_content").(string)
 	} else if d.HasChange("cert_content_wo_version") {
-		certPath = d.Get("cert_content_wo").(string)
+		if v := rawCfg.GetAttr("cert_content_wo"); !v.IsNull() && v.IsKnown() {
+			certPath = v.AsString()
+		}
 	}
 
 	var sourcePath string
 	var err error
 	if keyPath != "" {
-		sourcePath, err = client.UploadKey(keyName, keyPath)
-		if err != nil {
-			return diag.FromErr(fmt.Errorf("error while trying to upload ssl key (%s): %s", keyName, err))
+		keyLocalPath, _, uploadErr := uploadP12File(client, []byte(keyPath), keyName)
+		if uploadErr != nil {
+			return diag.FromErr(fmt.Errorf("error while trying to upload ssl key (%s): %s", keyName, uploadErr))
 		}
+		sourcePath = "file://" + keyLocalPath
 	}
 
 	keyCfg := bigip.Key{
@@ -342,7 +382,13 @@ func resourceBigipSSLKeyCertUpdate(ctx context.Context, d *schema.ResourceData, 
 	// only when cert_content or cert_content_wo_version changed). For metadata-only
 	// updates (monitoring/issuer/OCSP), use ModifyCertificate instead.
 	if certPath != "" {
-		err = client.UpdateCertificate(certPath, cert)
+		certLocalPath, _, uploadErr := uploadP12File(client, []byte(certPath), certName)
+		if uploadErr != nil {
+			return diag.FromErr(fmt.Errorf("error while uploading the ssl certificate (%s): %s", certName, uploadErr))
+		}
+		cert.SourcePath = "file://" + certLocalPath
+		certFullPath := fmt.Sprintf("/%s/%s", partition, certName)
+		err = client.ModifyCertificate(certFullPath, cert)
 		if err != nil {
 			return diag.FromErr(fmt.Errorf("error while updating the ssl certificate (%s): %s", certName, err))
 		}
